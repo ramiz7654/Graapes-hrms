@@ -1,0 +1,2 @@
+/* Shared dashboard styles. Existing layout styling uses the app's Tailwind utilities and design tokens. */
+.dashboard-role-selector { min-width: 0; }

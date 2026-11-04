@@ -1,0 +1,495 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Login account. Separate from Employee: an account may exist without a profile (Super Admin bootstrap).
+model UserAccount {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  displayName     String?
+  mobile          String?
+  personalAddress String?
+  dateOfBirth     DateTime? @db.Date
+  passwordHash    String?
+  role            Role
+  isActive        Boolean   @default(true)
+  /// Incremented on logout-all / deactivate / password change; invalidates older sessions immediately.
+  tokenVersion    Int       @default(0)
+  inviteTokenHash String?
+  inviteExpiresAt DateTime?
+  passwordResetTokenHash String?
+  passwordResetExpiresAt DateTime?
+  lastLoginAt     DateTime?
+  failedLogins    Int       @default(0)
+  lockedUntil     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  employee        Employee?
+
+  @@index([role])
+}
+
+model Department {
+  id           String                 @id @default(cuid())
+  name         String                 @unique
+  code         String                 @unique
+  headId       String?
+  isActive     Boolean                @default(true)
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+  audiences    AnnouncementAudience[]
+  head         Employee?              @relation("DepartmentHead", fields: [headId], references: [id])
+  designations Designation[]
+  employees    Employee[]             @relation("EmployeeDepartment")
+}
+
+model Designation {
+  id           String      @id @default(cuid())
+  title        String
+  departmentId String?
+  isActive     Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  department   Department? @relation(fields: [departmentId], references: [id])
+  employees    Employee[]
+
+  @@unique([title, departmentId])
+}
+
+model Employee {
+  id                String                 @id @default(cuid())
+  employeeCode      String                 @unique
+  fullName          String
+  workEmail         String                 @unique
+  mobile            String?
+  personalAddress   String?
+  dateOfBirth       DateTime?              @db.Date
+  profilePhotoKey   String?
+  employmentType    EmploymentType
+  status            EmploymentStatus       @default(ACTIVE)
+  joiningDate       DateTime               @db.Date
+  probationEndDate  DateTime?              @db.Date
+  workLocation      String?
+  departmentId      String?
+  designationId     String?
+  managerId         String?
+  emergencyName     String?
+  emergencyRelation String?
+  emergencyPhone    String?
+  resignationDate   DateTime?              @db.Date
+  lastWorkingDay    DateTime?              @db.Date
+  exitStatus        String?
+  /// false = deactivated. Records are never hard-deleted (BR-007).
+  isActive          Boolean                @default(true)
+  userAccountId     String?                @unique
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  correctionsToDo   AttendanceCorrection[] @relation("CorrectionApprover")
+  corrections       AttendanceCorrection[] @relation("CorrectionRequester")
+  punches           AttendancePunch[]
+  attendance        AttendanceRecord[]
+  headOf            Department[]           @relation("DepartmentHead")
+  department        Department?            @relation("EmployeeDepartment", fields: [departmentId], references: [id])
+  designation       Designation?           @relation(fields: [designationId], references: [id])
+  manager           Employee?              @relation("ReportingLine", fields: [managerId], references: [id])
+  reports           Employee[]             @relation("ReportingLine")
+  userAccount       UserAccount?           @relation(fields: [userAccountId], references: [id])
+  documents         EmployeeDocument[]
+  history           EmployeeHistory[]
+  letters           HRLetter[]
+  ledger            LeaveLedgerEntry[]
+  leaveToApprove    LeaveRequest[]         @relation("LeaveApprover")
+  leaveRequests     LeaveRequest[]         @relation("LeaveRequester")
+
+  @@index([departmentId])
+  @@index([managerId])
+  @@index([status])
+  @@index([fullName])
+}
+
+/// Field-level change history for lifecycle / organization changes (AC-03).
+model EmployeeHistory {
+  id          String   @id @default(cuid())
+  employeeId  String
+  field       String
+  oldValue    String?
+  newValue    String?
+  changedById String?
+  changedAt   DateTime @default(now())
+  employee    Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId, changedAt])
+}
+
+/// Immutable raw punches (BRD 7.2: timestamp, identity, source). Never edited; corrections add new punches.
+model AttendancePunch {
+  id         String      @id @default(cuid())
+  employeeId String
+  type       PunchType
+  at         DateTime
+  source     PunchSource @default(WEB_SELF)
+  createdAt  DateTime    @default(now())
+  employee   Employee    @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId, at])
+}
+
+/// Daily summary, one row per employee per company-local date.
+model AttendanceRecord {
+  id          String                 @id @default(cuid())
+  employeeId  String
+  date        DateTime               @db.Date
+  firstIn     DateTime?
+  lastOut     DateTime?
+  status      AttendanceStatus
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  corrections AttendanceCorrection[]
+  employee    Employee               @relation(fields: [employeeId], references: [id])
+
+  @@unique([employeeId, date])
+  @@index([date, status])
+}
+
+model AttendanceCorrection {
+  id              String            @id @default(cuid())
+  employeeId      String
+  recordId        String?
+  date            DateTime          @db.Date
+  originalIn      DateTime?
+  originalOut     DateTime?
+  requestedIn     DateTime?
+  requestedOut    DateTime?
+  reason          String
+  approverId      String?
+  status          RequestStatus     @default(PENDING)
+  decidedById     String?
+  decidedAt       DateTime?
+  decisionComment String?
+  version         Int               @default(0)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  approver        Employee?         @relation("CorrectionApprover", fields: [approverId], references: [id])
+  employee        Employee          @relation("CorrectionRequester", fields: [employeeId], references: [id])
+  record          AttendanceRecord? @relation(fields: [recordId], references: [id])
+
+  @@index([status, approverId])
+  @@index([employeeId, date])
+}
+
+/// All entitlement values are NULL / off until HR configures them (OQ-05). Nothing is assumed.
+model LeaveType {
+  id                   String             @id @default(cuid())
+  name                 String             @unique
+  code                 String             @unique
+  isPaid               Boolean            @default(true)
+  requiresReason       Boolean            @default(false)
+  allowHalfDay         Boolean            @default(false)
+  annualAllowance      Decimal?           @db.Decimal(6, 2)
+  allowNegativeBalance Boolean            @default(false)
+  isActive             Boolean            @default(true)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  ledger               LeaveLedgerEntry[]
+  requests             LeaveRequest[]
+}
+
+/// Balance = SUM of ledger entries. Append-only: gives history and auditability.
+model LeaveLedgerEntry {
+  id             String        @id @default(cuid())
+  employeeId     String
+  leaveTypeId    String
+  year           Int
+  kind           LedgerKind
+  days           Decimal       @db.Decimal(6, 2)
+  leaveRequestId String?
+  note           String?
+  createdById    String?
+  createdAt      DateTime      @default(now())
+  employee       Employee      @relation(fields: [employeeId], references: [id])
+  leaveRequest   LeaveRequest? @relation(fields: [leaveRequestId], references: [id])
+  leaveType      LeaveType     @relation(fields: [leaveTypeId], references: [id])
+
+  @@index([employeeId, leaveTypeId, year])
+}
+
+model LeaveRequest {
+  id          String              @id @default(cuid())
+  employeeId  String
+  leaveTypeId String
+  startDate   DateTime            @db.Date
+  endDate     DateTime            @db.Date
+  isHalfDay   Boolean             @default(false)
+  halfDayPart HalfDayPart?
+  days        Decimal             @db.Decimal(6, 2)
+  reason      String?
+  approverId  String?
+  status      RequestStatus       @default(PENDING)
+  version     Int                 @default(0)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  ledger      LeaveLedgerEntry[]
+  approver    Employee?           @relation("LeaveApprover", fields: [approverId], references: [id])
+  employee    Employee            @relation("LeaveRequester", fields: [employeeId], references: [id])
+  leaveType   LeaveType           @relation(fields: [leaveTypeId], references: [id])
+  events      LeaveRequestEvent[]
+
+  @@index([employeeId, startDate])
+  @@index([status, approverId])
+}
+
+/// Decision / lifecycle history: actor, timestamp, action, comment (BR-006).
+model LeaveRequestEvent {
+  id             String       @id @default(cuid())
+  leaveRequestId String
+  actorId        String?
+  action         String
+  comment        String?
+  createdAt      DateTime     @default(now())
+  leaveRequest   LeaveRequest @relation(fields: [leaveRequestId], references: [id], onDelete: Cascade)
+
+  @@index([leaveRequestId, createdAt])
+}
+
+model Holiday {
+  id          String   @id @default(cuid())
+  date        DateTime @db.Date
+  name        String
+  isPublished Boolean  @default(false)
+  location    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([date, name])
+  @@index([date])
+}
+
+model Announcement {
+  id          String                 @id @default(cuid())
+  title       String
+  body        String
+  status      AnnouncementStatus     @default(DRAFT)
+  publishAt   DateTime?
+  expiresAt   DateTime?
+  createdById String?
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  audiences   AnnouncementAudience[]
+
+  @@index([status, publishAt])
+}
+
+model AnnouncementAudience {
+  id             String       @id @default(cuid())
+  announcementId String
+  type           AudienceType
+  departmentId   String?
+  role           Role?
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  department     Department?  @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+}
+
+model EmployeeDocument {
+  id           String           @id @default(cuid())
+  employeeId   String
+  category     DocumentCategory
+  title        String
+  fileName     String
+  storageKey   String           @unique
+  mimeType     String
+  sizeBytes    Int
+  isSensitive  Boolean          @default(true)
+  uploadedById String?
+  deletedAt    DateTime?
+  createdAt    DateTime         @default(now())
+  employee     Employee         @relation(fields: [employeeId], references: [id])
+  letters      HRLetter[]
+
+  @@index([employeeId, category])
+}
+
+/// Letter RECORDS only. Template generation needs client-approved templates (OQ-08).
+model HRLetter {
+  id         String            @id @default(cuid())
+  employeeId String
+  type       LetterType
+  status     LetterStatus      @default(DRAFT)
+  issuedAt   DateTime?
+  issuedById String?
+  documentId String?
+  note       String?
+  createdAt  DateTime          @default(now())
+  document   EmployeeDocument? @relation(fields: [documentId], references: [id])
+  employee   Employee          @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId])
+}
+
+model Notification {
+  id          String    @id @default(cuid())
+  userId      String
+  type        String
+  title       String
+  body        String?
+  link        String?
+  readAt      DateTime?
+  emailStatus String?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId, readAt, createdAt])
+}
+
+/// Persists read state for generated/contextual notifications whose content is not stored in Notification.
+model NotificationReadState {
+  id              String   @id @default(cuid())
+  userId          String
+  notificationKey String
+  readAt          DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@unique([userId, notificationKey])
+  @@index([userId, readAt])
+}
+
+/// Key/value business settings: workplace name, timezone, grace period ... (persisted, FR settings requirement).
+model OrganizationSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
+
+/// Append-only audit trail. The application exposes NO update/delete path for this table.
+model AuditLog {
+  id         String       @id @default(cuid())
+  actorId    String?
+  actorEmail String?
+  action     String
+  entityType String
+  entityId   String?
+  outcome    AuditOutcome @default(SUCCESS)
+  before     Json?
+  after      Json?
+  comment    String?
+  ip         String?
+  createdAt  DateTime     @default(now())
+
+  @@index([createdAt])
+  @@index([entityType, entityId])
+  @@index([actorId, createdAt])
+  @@index([action])
+}
+
+enum Role {
+  SUPER_ADMIN
+  HR_ADMIN
+  MANAGER
+  EMPLOYEE
+  FINANCE
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERN
+}
+
+enum EmploymentStatus {
+  ACTIVE
+  PROBATION
+  NOTICE_PERIOD
+  EXITED
+}
+
+enum PunchType {
+  IN
+  OUT
+}
+
+enum PunchSource {
+  WEB_SELF
+  CORRECTION
+  HR_ENTRY
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  MISSING_PUNCH
+  ON_LEAVE
+  HOLIDAY
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CLARIFICATION_REQUESTED
+  CANCELLED
+}
+
+enum LedgerKind {
+  OPENING
+  ACCRUAL
+  ADJUSTMENT
+  PENDING_HOLD
+  USED
+  RELEASE
+}
+
+enum HalfDayPart {
+  FIRST_HALF
+  SECOND_HALF
+}
+
+enum AnnouncementStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum AudienceType {
+  ALL
+  DEPARTMENT
+  ROLE
+}
+
+enum DocumentCategory {
+  RESUME
+  ID_PROOF
+  ADDRESS_PROOF
+  SIGNED_LETTER
+  CERTIFICATE
+  OTHER
+}
+
+enum LetterType {
+  OFFER
+  APPOINTMENT
+  INTERNSHIP_CERTIFICATE
+  EXPERIENCE
+}
+
+enum LetterStatus {
+  DRAFT
+  ISSUED
+  REVOKED
+}
+
+enum AuditOutcome {
+  SUCCESS
+  FAILURE
+  DENIED
+}
+
+/// Permanent counters for generated login IDs (GRA-HR-, GRA-MGR-, GRA-EMP-). Row-locked on use so concurrent creates never get the same number.
+model IdSequence {
+  key   String @id
+  value Int    @default(0)
+}

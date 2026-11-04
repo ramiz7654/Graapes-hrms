@@ -1,0 +1,15 @@
+node_modules/
+dist/
+build/
+coverage/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+Thumbs.db
+# Private uploaded files (employee documents) must never be committed
+storage/
+uploads/
+.vscode/
+.idea/

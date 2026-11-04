@@ -1,0 +1,375 @@
+@import '@fontsource-variable/plus-jakarta-sans';
+@import 'tailwindcss';
+
+/* Dark mode */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* =========================
+   1. DESIGN TOKENS
+========================= */
+:root {
+  --bg: #f4f2fa;
+  --surface: #ffffff;
+  --surface-2: #faf9fd;
+  --border: #e4e0f0;
+  --text: #1a1430;
+  --muted: #655e80;
+  --accent: #6636d3;
+  --accent-hover: #5527b8;
+  --accent-fg: #ffffff;
+  --accent-soft: #eee8fd;
+  --success: #12805c;
+  --success-soft: #def5ec;
+  --warning: #9a5b00;
+  --warning-soft: #fdf0d5;
+  --danger: #c02a3b;
+  --danger-soft: #fde4e7;
+  --shadow: 0 1px 2px rgb(26 20 48 / 0.06),
+    0 6px 20px -8px rgb(26 20 48 / 0.12);
+  color-scheme: light;
+}
+
+.dark {
+  --bg: #0d0a17;
+  --surface: #171325;
+  --surface-2: #1d1830;
+  --border: #2d2646;
+  --text: #ede9f8;
+  --muted: #a49dbf;
+  --accent: #a688f5;
+  --accent-hover: #b99ff8;
+  --accent-fg: #130d26;
+  --accent-soft: #2a2148;
+  --success: #4cd1a0;
+  --success-soft: #11332a;
+  --warning: #f0b84a;
+  --warning-soft: #392a0c;
+  --danger: #ff7a8a;
+  --danger-soft: #3d1a22;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4),
+    0 8px 24px -8px rgb(0 0 0 / 0.6);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --font-sans: 'Plus Jakarta Sans Variable', system-ui, sans-serif;
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-soft: var(--accent-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --shadow-card: var(--shadow);
+}
+
+/* =========================
+   2. GLOBAL STYLES
+========================= */
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* =========================
+   3. SHARED HEADER & BRAND
+========================= */
+.app-header {
+  min-height: 68px;
+}
+
+.desktop-header {
+  justify-content: flex-start;
+  width: 100%;
+}
+
+.desktop-header .brand-lockup {
+  flex: 0 0 auto;
+}
+
+.desktop-header .desktop-quick-nav {
+  justify-content: flex-start;
+}
+
+.brand-logo {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  object-position: center;
+  padding: 0;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.compact-menu-button {
+  display: none;
+}
+
+/* =========================
+   4. DASHBOARD GREETING
+========================= */
+.greeting-hero {
+  background: linear-gradient(
+    115deg,
+    var(--surface),
+    var(--accent-soft)
+  );
+  box-shadow: var(--shadow);
+}
+
+.greeting-clock {
+  min-width: 190px;
+}
+
+/* =========================
+   5. DESKTOP SIDEBAR
+========================= */
+.desktop-sidebar {
+  display: flex;
+  width: 68px;
+  padding: 8px 7px 10px;
+  gap: 0;
+  overflow: hidden;
+  flex-shrink: 0;
+  flex-direction: column;
+  transition: width 220ms ease;
+}
+
+.desktop-sidebar.is-expanded {
+  width: max-content;
+  min-width: 190px;
+  max-width: 250px;
+  padding-inline: 10px;
+}
+
+.desktop-main {
+  margin-left: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebar-expand-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 5px;
+}
+
+.sidebar-expand-row.is-compact {
+  justify-content: center;
+}
+
+.sidebar-expand-button {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 10px;
+  color: var(--muted);
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.sidebar-expand-button:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.sidebar-nav {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.desktop-sidebar .sidebar-nav a {
+  white-space: nowrap;
+  padding-block: 9px;
+}
+
+.desktop-sidebar.is-expanded .sidebar-nav a {
+  justify-content: flex-start;
+  padding-inline: 10px;
+}
+
+.desktop-sidebar > button {
+  margin-top: auto;
+  padding-block: 9px;
+  white-space: nowrap;
+}
+
+/* =========================
+   6. NAVIGATION DRAWER
+========================= */
+.drawer-layer {
+  position: fixed;
+  inset: 0;
+  top: 68px;
+  z-index: 50;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.drawer-layer.is-open {
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.drawer-backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: rgb(8 6 18 / 0.48);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 280ms ease;
+}
+
+.drawer-layer.is-open .drawer-backdrop {
+  opacity: 1;
+}
+
+.drawer-panel {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  right: auto;
+  display: flex;
+  width: min(320px, 82vw);
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 18px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  transform: translateX(-100%);
+  transition: transform 320ms cubic-bezier(.22, .8, .25, 1);
+}
+
+.drawer-layer.is-open .drawer-panel {
+  transform: translateX(0);
+}
+
+.drawer-panel .sidebar-expand-row {
+  display: none;
+}
+
+.drawer-panel .sidebar-nav {
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.drawer-panel .sidebar-nav::-webkit-scrollbar {
+  display: none;
+}
+
+/* =========================
+   7. MOBILE-ONLY ELEMENTS
+========================= */
+.mobile-bottom-nav {
+  display: none !important;
+  min-height: 64px;
+  box-shadow: 0 -5px 18px rgb(0 0 0 / 0.05);
+}
+
+.mobile-main {
+  padding-bottom: 1rem;
+}
+
+/* =========================
+   8. RESPONSIVE LAYOUTS
+   Only two screen layouts:
+   Full desktop: > 820px
+   Compact screen: <= 820px
+========================= */
+@media screen and (max-width: 750px) {
+  /* Compact header */
+  .desktop-header {
+    display: flex !important;
+    gap: 10px;
+    padding-inline: 12px;
+  }
+
+  .desktop-header .brand-lockup {
+    min-width: 0;
+  }
+
+  .desktop-quick-nav {
+    display: none !important;
+  }
+
+  .compact-menu-button {
+    display: grid !important;
+  }
+
+  /* Use the drawer instead of the fixed sidebar */
+  .desktop-sidebar {
+    display: none !important;
+  }
+
+  .desktop-main {
+    margin-left: 0;
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Compact dashboard greeting */
+  .greeting-clock {
+    min-width: 0;
+  }
+
+  /* Drawer starts below the header */
+  .drawer-layer {
+    top: 68px;
+  }
+
+  .drawer-panel {
+    width: min(220px, 82vw);
+  }
+
+  /* Keep the mobile-specific shell disabled */
+  .mobile-shell,
+  .mobile-header {
+    display: none !important;
+  }
+}
+
+/* =========================
+   9. ACCESSIBILITY
+========================= */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

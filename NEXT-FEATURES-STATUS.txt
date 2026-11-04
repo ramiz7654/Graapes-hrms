@@ -1,0 +1,13 @@
+Graapes HRMS update notes
+
+Included in this patch:
+- Profile personal details are presented in one full-width card instead of separate summary and edit cards.
+- Profile edit form loads the account name as a fallback when no employee record is linked.
+- After a successful profile save, the local signed-in user display name is updated and a same-tab event refreshes the greeting.
+
+Important remaining work (not implemented in this patch):
+- Employee creation must be wired to a secure backend endpoint that creates both Employee and UserAccount records, generates a unique Employee ID, validates duplicate email, and creates a secure initial password/invitation. Do not let users log in with email/employee ID alone.
+- Organization setup needs real create/list/update APIs and forms for company details, departments and designations. Employee form dropdowns should load from these records.
+- These remaining items require implementation and end-to-end testing before being treated as production-ready.
+
+After replacing files, restart frontend and API. The profile update uses the existing profile API and database schema; if your local database is not in sync, back it up and run `npx prisma generate` and the project's normal schema migration/db-push workflow.
