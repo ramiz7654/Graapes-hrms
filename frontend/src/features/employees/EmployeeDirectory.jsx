@@ -1,5 +1,7 @@
 import { createPortal } from 'react-dom';
 import { useEffect, useState } from 'react';
+import { useConfirm } from '../../components/ConfirmDialog.jsx';
+import PhoneInput from '../../components/PhoneInput.jsx';
 import {
   Users,
   UserPlus,
@@ -24,7 +26,8 @@ export default function EmployeeDirectory() {
   const navigate = useNavigate();
   const isUserManagement = location.pathname === '/admin';
   const [employees, setEmployees] = useState([]);
-  const [options, setOptions] = useState({ departments: [], designations: [], managers: [] });
+  const [options, setOptions] = useState({ departments: [], designations: [], managers: [], locations: [] });
+  const { confirm, confirmDialog } = useConfirm();
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState('');
@@ -49,6 +52,8 @@ export default function EmployeeDirectory() {
     departmentId: '',
     designationId: '',
     managerId: '',
+    hrId: '',
+    workLocation: '',
     joiningDate: new Date().toISOString().slice(0, 10),
   });
 
@@ -61,7 +66,16 @@ export default function EmployeeDirectory() {
     : user?.role === 'HR_ADMIN' ? ['MANAGER', 'EMPLOYEE'] : [];
 
   function openAddModal(role) {
-    setForm((f) => ({ ...f, role }));
+    const hrAdmins = options.managers.filter((m) => m.role === 'HR_ADMIN');
+    const onlyHr = hrAdmins.length === 1 ? hrAdmins[0].id : '';
+    setForm((f) => ({
+      ...f,
+      role,
+      // Manager -> reports to an HR; Employee -> HR is derived from the chosen manager (or picked when no manager).
+      managerId: role === 'MANAGER' ? onlyHr : '',
+      hrId: role === 'EMPLOYEE' ? onlyHr : '',
+      workLocation: (options.locations.find((l) => l.isHeadquarters) || options.locations[0])?.name || '',
+    }));
     setError('');
     setShowAddModal(true);
   }
@@ -72,11 +86,11 @@ export default function EmployeeDirectory() {
     try {
       const [empRes, optRes] = await Promise.all([
         api('/employees').catch(() => ({ employees: [] })),
-        api('/organization/options').catch(() => ({ departments: [], designations: [], managers: [] })),
+        api('/organization/options').catch(() => ({ departments: [], designations: [], managers: [], locations: [] })),
       ]);
 
       setEmployees(empRes.employees || []);
-      setOptions(optRes || { departments: [], designations: [], managers: [] });
+      setOptions(optRes || { departments: [], designations: [], managers: [], locations: [] });
     } catch (err) {
       setError(err.message || 'Failed to load employee directory.');
     } finally {
@@ -95,9 +109,18 @@ export default function EmployeeDirectory() {
     setSuccess('');
 
     try {
+      const { hrId, ...rest } = form;
+      let managerId = form.managerId;
+      if (form.role === 'HR_ADMIN') managerId = ''; // HR always reports to the Super Admin (no employee record, so stored empty)
+      if (form.role === 'EMPLOYEE' && !managerId) managerId = hrId;
+      if (form.role !== 'HR_ADMIN' && !managerId) {
+        setError(form.role === 'MANAGER' ? 'Select the HR this manager reports to.' : 'Select a reporting manager or HR.');
+        setActionLoading(false);
+        return;
+      }
       const res = await api('/employees', {
         method: 'POST',
-        body: form,
+        body: { ...rest, managerId },
       });
 
       setSuccess(`${ROLE_LABELS[form.role] || 'Employee'} account created successfully.`);
@@ -112,6 +135,8 @@ export default function EmployeeDirectory() {
         departmentId: '',
         designationId: '',
         managerId: '',
+        hrId: '',
+        workLocation: '',
         joiningDate: new Date().toISOString().slice(0, 10),
       });
       await loadData();
@@ -124,7 +149,15 @@ export default function EmployeeDirectory() {
 
   async function handleToggleStatus(employeeId, currentActive) {
     const action = currentActive ? 'deactivate' : 'activate';
-    if (!window.confirm(`Are you sure you want to ${action} this employee's account?`)) return;
+    const ok = await confirm({
+      title: `${currentActive ? 'Deactivate' : 'Activate'} employee`,
+      message: currentActive
+        ? "Are you sure you want to deactivate this employee's account? They will no longer be able to sign in."
+        : "Are you sure you want to activate this employee's account? They will be able to sign in again.",
+      confirmLabel: currentActive ? 'Yes, Deactivate' : 'Yes, Activate',
+      danger: currentActive,
+    });
+    if (!ok) return;
 
     setActionLoading(true);
     try {
@@ -152,12 +185,18 @@ export default function EmployeeDirectory() {
     return matchesSearch && matchesDept && matchesStatus;
   });
 
+  // Manager account -> HR admins only. Employee account -> managers only; the HR follows from the manager.
+  const hrOptions = options.managers.filter((m) => m.role === 'HR_ADMIN');
+  const managerOptions = options.managers.filter((m) => m.role === 'MANAGER');
+  const selectedManager = managerOptions.find((m) => m.id === form.managerId) || null;
+  const derivedHr = selectedManager ? options.managers.find((m) => m.id === selectedManager.managerId) || null : null;
   const availableDesignations = form.departmentId
     ? options.designations.filter((d) => !d.departmentId || d.departmentId === form.departmentId)
     : options.designations;
 
   return (
     <div className="space-y-6">
+      {confirmDialog}
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -173,7 +212,7 @@ export default function EmployeeDirectory() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="employee-directory-actions">
           <button
             type="button"
             onClick={loadData}
@@ -385,13 +424,7 @@ export default function EmployeeDirectory() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-muted">Mobile Number</label>
-                  <input
-                    type="tel"
-                    placeholder="+91 98765 00000"
-                    value={form.mobile}
-                    onChange={(e) => setForm({ ...form, mobile: e.target.value })}
-                    className="mt-1.5 w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm outline-none focus:border-accent"
-                  />
+                  <PhoneInput value={form.mobile} onChange={(mobile) => setForm({ ...form, mobile })} />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-muted">Account Type</label>
@@ -434,22 +467,79 @@ export default function EmployeeDirectory() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {/* Reporting line: HR -> Super Admin (fixed); Manager -> HR; Employee -> Manager + HR (auto) */}
+              {form.role === 'HR_ADMIN' && (
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-muted">Reporting Manager</label>
+                  <div className="mt-1.5 w-full rounded-xl border border-border bg-surface-2/60 px-3.5 py-2.5 text-sm font-semibold">Super Admin (default)</div>
+                </div>
+              )}
+
+              {form.role === 'MANAGER' && (
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted">Reporting Manager (HR)</label>
                   <select
+                    required
                     value={form.managerId}
                     onChange={(e) => setForm({ ...form, managerId: e.target.value })}
                     className="mt-1.5 w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm outline-none focus:border-accent"
                   >
-                    <option value="">None (Top Level / Independent)</option>
-                    {options.managers.map((m) => (
+                    <option value="">Select HR</option>
+                    {hrOptions.map((m) => (
                       <option key={m.id} value={m.id}>
                         {m.fullName} ({m.employeeCode})
                       </option>
                     ))}
                   </select>
                 </div>
+              )}
+
+              {form.role === 'EMPLOYEE' && (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted">Reporting Manager</label>
+                    <select
+                      value={form.managerId}
+                      onChange={(e) => {
+                        const manager = managerOptions.find((m) => m.id === e.target.value);
+                        setForm({ ...form, managerId: e.target.value, hrId: manager?.managerId || (hrOptions.length === 1 ? hrOptions[0].id : '') });
+                      }}
+                      className="mt-1.5 w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm outline-none focus:border-accent"
+                    >
+                      <option value="">Select manager</option>
+                      {managerOptions.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.fullName} ({m.employeeCode})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted">Reporting HR</label>
+                    {selectedManager ? (
+                      <div className="mt-1.5 w-full rounded-xl border border-border bg-surface-2/60 px-3.5 py-2.5 text-sm font-semibold">
+                        {derivedHr ? `${derivedHr.fullName} (${derivedHr.employeeCode})` : 'No HR linked to this manager'}
+                      </div>
+                    ) : (
+                      <select
+                        required
+                        value={form.hrId}
+                        onChange={(e) => setForm({ ...form, hrId: e.target.value })}
+                        className="mt-1.5 w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm outline-none focus:border-accent"
+                      >
+                        <option value="">Select HR</option>
+                        {hrOptions.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.fullName} ({m.employeeCode})
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-muted">Employment Type</label>
                   <select
@@ -463,17 +553,33 @@ export default function EmployeeDirectory() {
                     <option value="INTERN">Intern</option>
                   </select>
                 </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-muted">Joining Date</label>
+                  <input
+                    required
+                    type="date"
+                    value={form.joiningDate}
+                    onChange={(e) => setForm({ ...form, joiningDate: e.target.value })}
+                    className="mt-1.5 w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm outline-none focus:border-accent"
+                  />
+                </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-muted">Joining Date</label>
-                <input
+                <label className="block text-xs font-semibold uppercase tracking-wider text-muted">Work Location</label>
+                <select
                   required
-                  type="date"
-                  value={form.joiningDate}
-                  onChange={(e) => setForm({ ...form, joiningDate: e.target.value })}
+                  value={form.workLocation}
+                  onChange={(e) => setForm({ ...form, workLocation: e.target.value })}
                   className="mt-1.5 w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm outline-none focus:border-accent"
-                />
+                >
+                  {options.locations.length === 0 && <option value="">No locations set up yet</option>}
+                  {options.locations.map((l) => (
+                    <option key={l.id} value={l.name}>
+                      {l.name}{l.city || l.state ? ` (${[l.city, l.state].filter(Boolean).join(', ')})` : ''}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-3">

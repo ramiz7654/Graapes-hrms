@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../../lib/prisma.js';
+import { normalizeIndianMobile, resolveWorkLocation } from '../../lib/validators.js';
 import { requireAuth, requireRoles, logAudit } from '../../middleware/auth.js';
 import { parseDateOnly } from '../../lib/dateUtils.js';
 import { HttpError } from '../../utils/httpError.js';
@@ -118,7 +119,8 @@ export function employeesRouter() {
         include: {
           department: true,
           designation: true,
-          manager: true,
+          // The manager's own manager is the Reporting HR for employees who report to a Manager.
+          manager: { include: { manager: { select: { id: true, fullName: true, employeeCode: true } }, userAccount: { select: { role: true } } } },
           userAccount: { select: { id: true, email: true, role: true, isActive: true, lastLoginAt: true } },
           history: { orderBy: { changedAt: 'desc' }, take: 10 },
         },
@@ -191,6 +193,25 @@ export function employeesRouter() {
         }
       }
 
+      // Validate reporting-line hierarchy on the server; UI filtering is not a security boundary.
+      if (role === 'HR_ADMIN' && body.managerId) {
+        return res.status(400).json({ error: { code: 'INVALID_REPORTING_MANAGER', message: 'HR Admin must be independent or report at the Super Admin level.' } });
+      }
+      if (role === 'MANAGER') {
+        if (!body.managerId) return res.status(400).json({ error: { code: 'REPORTING_MANAGER_REQUIRED', message: 'Select an HR Admin as reporting manager.' } });
+        const manager = await prisma.employee.findFirst({ where: { id: body.managerId, isActive: true, userAccount: { role: 'HR_ADMIN', isActive: true } }, select: { id: true } });
+        if (!manager) return res.status(400).json({ error: { code: 'INVALID_REPORTING_MANAGER', message: 'A Manager must report to an active HR Admin.' } });
+      }
+      if (role === 'EMPLOYEE' && body.managerId) {
+        const manager = await prisma.employee.findFirst({ where: { id: body.managerId, isActive: true, userAccount: { role: { in: ['HR_ADMIN', 'MANAGER'] }, isActive: true } }, select: { id: true } });
+        if (!manager) return res.status(400).json({ error: { code: 'INVALID_REPORTING_MANAGER', message: 'Employees may report only to an active HR Admin or Manager.' } });
+      }
+
+      const mobileCheck = normalizeIndianMobile(body.mobile);
+      if (!mobileCheck.ok) return res.status(400).json({ error: { code: 'INVALID_MOBILE', message: mobileCheck.message } });
+      const workLocation = await resolveWorkLocation(body.workLocation);
+      if (!workLocation) return res.status(400).json({ error: { code: 'INVALID_LOCATION', message: 'Choose one of the company locations.' } });
+
       // Initial password (readable, no look-alike characters). The role-based ID is generated inside the transaction below.
       const temporaryPassword = generateTemporaryPassword();
       const passwordHash = await bcrypt.hash(temporaryPassword, 12);
@@ -214,8 +235,8 @@ export function employeesRouter() {
             employeeCode,
             fullName,
             workEmail: email,
-            mobile: body.mobile?.trim() || null,
-            workLocation: body.workLocation?.trim() || 'Headquarters',
+            mobile: mobileCheck.value,
+            workLocation,
             employmentType,
             joiningDate,
             departmentId: body.departmentId || null,
@@ -300,6 +321,44 @@ export function employeesRouter() {
         if (body[key] !== undefined) {
           updateData[key] = body[key] === '' ? null : body[key];
         }
+      }
+
+      if (updateData.mobile !== undefined) {
+        const mobileCheck = normalizeIndianMobile(updateData.mobile);
+        if (!mobileCheck.ok) return res.status(400).json({ error: { code: 'INVALID_MOBILE', message: mobileCheck.message } });
+        updateData.mobile = mobileCheck.value;
+      }
+      if (updateData.workLocation !== undefined) {
+        const resolved = await resolveWorkLocation(updateData.workLocation);
+        if (!resolved) return res.status(400).json({ error: { code: 'INVALID_LOCATION', message: 'Choose one of the company locations.' } });
+        updateData.workLocation = resolved;
+      }
+
+      // Reporting line: HR -> Super Admin (no manager record), Manager -> HR, Employee -> Manager or HR.
+      if (updateData.managerId !== undefined) {
+        const targetRole = body.role || employee.userAccount?.role || 'EMPLOYEE';
+        const nextManagerId = updateData.managerId || null;
+        if (targetRole === 'HR_ADMIN' && nextManagerId) {
+          return res.status(400).json({ error: { code: 'INVALID_REPORTING_MANAGER', message: 'An HR Admin reports to the Super Admin and cannot have a reporting manager.' } });
+        }
+        if (nextManagerId) {
+          if (nextManagerId === id) return res.status(400).json({ error: { code: 'INVALID_REPORTING_MANAGER', message: 'An employee cannot report to themselves.' } });
+          const manager = await prisma.employee.findFirst({
+            where: { id: nextManagerId, isActive: true, status: { not: 'EXITED' }, userAccount: { role: { in: targetRole === 'MANAGER' ? ['HR_ADMIN'] : ['HR_ADMIN', 'MANAGER'] }, isActive: true } },
+            select: { id: true },
+          });
+          if (!manager) {
+            return res.status(400).json({ error: { code: 'INVALID_REPORTING_MANAGER', message: targetRole === 'MANAGER' ? 'A manager must report to an active HR Admin.' : 'Choose an active HR Admin or Manager.' } });
+          }
+          // Walk up the chain: the new manager must not (directly or indirectly) report to this employee.
+          let cursor = nextManagerId;
+          for (let hop = 0; cursor && hop < 10; hop += 1) {
+            const up = await prisma.employee.findUnique({ where: { id: cursor }, select: { managerId: true } });
+            cursor = up?.managerId || null;
+            if (cursor === id) return res.status(400).json({ error: { code: 'INVALID_REPORTING_MANAGER', message: 'This would create a reporting loop.' } });
+          }
+        }
+        updateData.managerId = nextManagerId;
       }
 
       const nextDepartmentId = updateData.departmentId !== undefined ? updateData.departmentId : employee.departmentId;

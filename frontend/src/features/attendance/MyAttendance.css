@@ -350,11 +350,11 @@
 }
 
 .calendar-day.is-today {
-  color: #243ea8;
-  background: #e8edff;
-  border-color: #3f54bd;
+  color: #1d4ed8;
+  background: #dbeafe;
+  border-color: #2563eb;
   font-weight: 800;
-  box-shadow: 0 0 0 2px rgba(63, 84, 189, 0.12);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
 }
 
 .calendar-markers {
@@ -375,13 +375,13 @@
   border-radius: 50%;
 }
 
-.dot-present { background: #18b87a; }
-.dot-absent { background: #f04458; }
+.dot-present { background: #ec4899; }
+.dot-absent { background: #ef4444; }
 .dot-late { background: #efb832; }
-.dot-holiday { background: #1686f7; }
-.dot-leave { background: #8b5cf6; }
+.dot-holiday { background: #8b5cf6; }
+.dot-leave { background: #14b8a6; }
 .dot-pending-leave { background: #f59e0b; }
-.dot-today { background: #3f54bd; }
+.dot-today { background: #2563eb; }
 
 .calendar-legend {
   display: flex;
@@ -710,7 +710,7 @@
 [data-theme="dark"] .my-attendance .calendar-day.is-today,
 .dark .my-attendance .calendar-day.is-today,
 .dark-theme .my-attendance .calendar-day.is-today {
-  background: #3f54bd;
+  background: #2563eb;
   color: #fff;
 }
 
@@ -785,7 +785,7 @@
 [data-theme="dark"] .my-attendance .calendar-day.is-today,
 .dark .my-attendance .calendar-day.is-today,
 .dark-theme .my-attendance .calendar-day.is-today {
-  color: #dbe4ff;
-  background: #273765;
-  border-color: #8094ff;
+  color: #dbeafe;
+  background: #1e3a8a;
+  border-color: #60a5fa;
 }

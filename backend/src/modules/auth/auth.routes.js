@@ -5,6 +5,7 @@ import { prisma } from '../../lib/prisma.js';
 import { env } from '../../config/env.js';
 import { validateNewPassword } from '../../lib/passwords.js';
 import { sendPasswordResetEmail } from '../../lib/email.js';
+import { normalizeIndianMobile, resolveWorkLocation } from '../../lib/validators.js';
 
 const COOKIE_NAME = 'graapes_session';
 const ttlSeconds = Math.max(1, Number(env.SESSION_TTL_HOURS) || 8) * 60 * 60;
@@ -187,6 +188,11 @@ export function authRouter() {
           accountData[key === 'fullName' ? 'displayName' : key] = clean || null;
         }
         if (accountData.displayName !== undefined && (!accountData.displayName || accountData.displayName.length < 2)) return res.status(400).json({ error: { code: 'INVALID_INPUT', message: 'Enter your full name.' } });
+        if (accountData.mobile !== undefined) {
+          const mobileCheck = normalizeIndianMobile(accountData.mobile);
+          if (!mobileCheck.ok) return res.status(400).json({ error: { code: 'INVALID_MOBILE', message: mobileCheck.message } });
+          accountData.mobile = mobileCheck.value;
+        }
         if (accountData.dateOfBirth) {
           const parsed = new Date(`${accountData.dateOfBirth}T00:00:00.000Z`);
           if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== accountData.dateOfBirth) return res.status(400).json({ error: { code: 'INVALID_INPUT', message: 'Enter a valid date of birth.' } });
@@ -208,6 +214,16 @@ export function authRouter() {
         }
       }
       if (data.fullName !== undefined && (!data.fullName || data.fullName.length < 2)) return res.status(400).json({ error: { code: 'INVALID_INPUT', message: 'Enter your full name.' } });
+      if (data.mobile !== undefined) {
+        const mobileCheck = normalizeIndianMobile(data.mobile);
+        if (!mobileCheck.ok) return res.status(400).json({ error: { code: 'INVALID_MOBILE', message: mobileCheck.message } });
+        data.mobile = mobileCheck.value;
+      }
+      if (data.workLocation) {
+        const resolved = await resolveWorkLocation(data.workLocation);
+        if (!resolved) return res.status(400).json({ error: { code: 'INVALID_LOCATION', message: 'Choose one of the company locations.' } });
+        data.workLocation = resolved;
+      }
       if (data.dateOfBirth) {
         const parsed = new Date(`${data.dateOfBirth}T00:00:00.000Z`);
         if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== data.dateOfBirth) return res.status(400).json({ error: { code: 'INVALID_INPUT', message: 'Enter a valid date of birth.' } });

@@ -13,6 +13,9 @@ import {
 import { api } from '../../services/api.js';
 import { useAuth } from '../../app/AuthContext.jsx';
 
+const ALLOWED_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'doc', 'docx'];
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
+
 export default function DocumentsPage() {
   const { user } = useAuth();
   const [documents, setDocuments] = useState([]);
@@ -24,7 +27,7 @@ export default function DocumentsPage() {
 
   const [form, setForm] = useState({
     title: '',
-    fileName: '',
+    file: null,
     category: 'ID_PROOF',
   });
 
@@ -45,21 +48,75 @@ export default function DocumentsPage() {
     loadData();
   }, []);
 
+  function pickFile(event) {
+    const file = event.target.files?.[0] || null;
+    setError('');
+    if (file) {
+      const ext = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : '';
+      if (!ALLOWED_EXTENSIONS.includes(ext)) {
+        setError('Only PDF, JPG, PNG, DOC and DOCX files are allowed.');
+        event.target.value = '';
+        return;
+      }
+      if (file.size > MAX_FILE_BYTES) {
+        setError('The file is larger than 5 MB. Choose a smaller file.');
+        event.target.value = '';
+        return;
+      }
+    }
+    setForm((current) => ({ ...current, file, title: current.title || (file ? file.name.replace(/\.[^.]+$/, '') : '') }));
+  }
+
+  function readAsBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+      reader.onerror = () => reject(new Error('Could not read the selected file.'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function downloadDocument(doc) {
+    setError('');
+    try {
+      const res = await fetch(`/api/documents/${doc.id}/download`, { credentials: 'include' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error?.message || 'Could not download the document.');
+      }
+      const url = URL.createObjectURL(await res.blob());
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = doc.fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err.message || 'Could not download the document.');
+    }
+  }
+
   async function handleAddDocument(e) {
     e.preventDefault();
+    if (!form.file) {
+      setError('Choose a file to upload.');
+      return;
+    }
     setActionLoading(true);
     setError('');
     try {
+      const dataBase64 = await readAsBase64(form.file);
       await api('/documents', {
         method: 'POST',
-        body: form,
+        body: { title: form.title, category: form.category, fileName: form.file.name, dataBase64 },
       });
-      setSuccess('Document record registered successfully.');
+      setSuccess('Document uploaded successfully.');
       setShowAddModal(false);
-      setForm({ title: '', fileName: '', category: 'ID_PROOF' });
+      setForm({ title: '', file: null, category: 'ID_PROOF' });
       await loadData();
     } catch (err) {
-      setError(err.message || 'Failed to add document record.');
+      setError(err.message || 'Failed to upload the document.');
     } finally {
       setActionLoading(false);
     }
@@ -149,7 +206,9 @@ export default function DocumentsPage() {
                       {d.category.replace('_', ' ')}
                     </span>
                   </td>
-                  <td className="py-3.5 font-mono text-xs text-muted">{d.fileName}</td>
+                  <td className="py-3.5 font-mono text-xs">
+                    <button type="button" onClick={() => downloadDocument(d)} title="Download" className="text-left text-accent underline-offset-2 hover:underline">{d.fileName}</button>
+                  </td>
                   <td className="py-3.5 text-xs text-muted">
                     {new Date(d.createdAt).toLocaleDateString('en-IN', {
                       day: 'numeric',
@@ -221,15 +280,17 @@ export default function DocumentsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-muted">File Name</label>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-muted">File</label>
                 <input
                   required
-                  type="text"
-                  placeholder="e.g. aadhaar_copy.pdf"
-                  value={form.fileName}
-                  onChange={(e) => setForm({ ...form, fileName: e.target.value })}
-                  className="mt-1.5 w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm outline-none focus:border-accent"
+                  type="file"
+                  accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                  onChange={pickFile}
+                  className="mt-1.5 w-full cursor-pointer rounded-xl border border-border bg-surface px-3.5 py-2 text-sm file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-accent-soft file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-accent"
                 />
+                <p className="mt-1.5 text-xs text-muted">
+                  {form.file ? `${form.file.name} · ${(form.file.size / 1024).toFixed(0)} KB` : 'PDF, JPG, PNG, DOC or DOCX · up to 5 MB'}
+                </p>
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-3">
@@ -245,7 +306,7 @@ export default function DocumentsPage() {
                   disabled={actionLoading}
                   className="rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-accent/90 disabled:opacity-50"
                 >
-                  {actionLoading ? 'Saving…' : 'Record Document'}
+                  {actionLoading ? 'Uploading…' : 'Upload Document'}
                 </button>
               </div>
             </form>

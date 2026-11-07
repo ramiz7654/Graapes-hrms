@@ -1,0 +1,17 @@
+Graapes HRMS - HR Attendance Dashboard update
+
+Changes in this update:
+1. HR Admin dashboard no longer displays the 'Reporting workforce trend' card.
+2. HR Admin dashboard no longer displays the 'Recent organization activity' card.
+3. Upcoming Holidays section remains in the existing individual holiday-card layout.
+4. HR workforce attendance breakdown now uses the configured organization shift start, shift end, grace period, and timezone.
+5. A check-in after workStart + graceMinutes is classified as Late. Check-in at or before that threshold is Present.
+6. Only explicit ABSENT attendance records or employees still without a record after configured shift end are counted Absent.
+7. Employees without a record before shift end are counted as Not marked, not Absent.
+8. Employees with approved leave for today are counted under Leave; published holiday today prevents missing records from being counted Absent.
+9. New check-ins persist PRESENT/LATE based on configured shift settings; check-out preserves the existing attendance status.
+
+Default settings in the application are 09:30 start, 18:30 end, and 15-minute grace period. Organization settings override these defaults.
+
+Validation performed: Node.js syntax checks passed for modified backend route files.
+Not performed: Full npm install, frontend production build, database-backed end-to-end testing. Please test on a local copy before deploying.

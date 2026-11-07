@@ -5,6 +5,7 @@ import { ArrowLeft, AlertCircle, KeyRound, RefreshCw, Trash2 } from 'lucide-reac
 import { api } from '../../services/api.js';
 import { useAuth } from '../../app/AuthContext.jsx';
 import CredentialsDialog from '../../components/CredentialsDialog.jsx';
+import { useConfirm } from '../../components/ConfirmDialog.jsx';
 
 const ROLE_LABELS = { SUPER_ADMIN: 'Super Admin', HR_ADMIN: 'HR', MANAGER: 'Manager', EMPLOYEE: 'Employee' };
 const EMPLOYMENT_LABELS = { FULL_TIME: 'Full time', PART_TIME: 'Part time', CONTRACT: 'Contract', INTERN: 'Intern' };
@@ -43,6 +44,13 @@ export default function EmployeeProfile() {
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [credentials, setCredentials] = useState(null);
+  const { confirm, confirmDialog } = useConfirm();
+
+  // Reporting line editor (Super Admin): lets old employees be linked to a manager / HR.
+  const [editingLine, setEditingLine] = useState(false);
+  const [lineOptions, setLineOptions] = useState({ managers: [] });
+  const [lineForm, setLineForm] = useState({ managerId: '', hrId: '' });
+  const [lineSaving, setLineSaving] = useState(false);
 
   const isSuperAdmin = user?.role === 'SUPER_ADMIN';
   const canReset = ['SUPER_ADMIN', 'HR_ADMIN'].includes(user?.role);
@@ -81,7 +89,13 @@ export default function EmployeeProfile() {
   }
 
   async function handleReset() {
-    if (!window.confirm('Generate a new temporary password? The old password will stop working.')) return;
+    const ok = await confirm({
+      title: 'Reset password',
+      message: 'Generate a new temporary password? The old password will stop working.',
+      confirmLabel: 'Yes, Reset Password',
+      danger: true,
+    });
+    if (!ok) return;
     setBusy(true);
     setError('');
     try {
@@ -95,11 +109,58 @@ export default function EmployeeProfile() {
   }
 
   const role = employee?.userAccount?.role;
+
+  // Who is who in the reporting line, derived from the manager's own role.
+  const managerRole = employee?.manager?.userAccount?.role;
+  const reportingManager = managerRole === 'MANAGER' ? employee.manager : null;
+  const reportingHr = managerRole === 'HR_ADMIN' ? employee.manager : managerRole === 'MANAGER' ? employee.manager?.manager || null : null;
+  const personLabel = (p) => (p ? `${p.fullName} (${p.employeeCode})` : null);
+  const canEditLine = isSuperAdmin && employee && ['EMPLOYEE', 'MANAGER'].includes(role);
+  const hrChoices = lineOptions.managers.filter((m) => m.role === 'HR_ADMIN' && m.id !== employee?.id);
+  const managerChoices = lineOptions.managers.filter((m) => m.role === 'MANAGER' && m.id !== employee?.id);
+  const pickedManager = managerChoices.find((m) => m.id === lineForm.managerId) || null;
+  const pickedManagerHr = pickedManager ? lineOptions.managers.find((m) => m.id === pickedManager.managerId) || null : null;
+
+  async function startEditLine() {
+    setError('');
+    try {
+      const opts = await api('/organization/options');
+      setLineOptions({ managers: opts.managers || [] });
+      setLineForm({
+        managerId: reportingManager?.id || '',
+        hrId: reportingManager ? '' : reportingHr?.id || '',
+      });
+      setEditingLine(true);
+    } catch (err) {
+      setError(err.message || 'Could not load managers and HR list.');
+    }
+  }
+
+  async function saveLine(event) {
+    event.preventDefault();
+    const managerId = role === 'MANAGER' ? lineForm.hrId : lineForm.managerId || lineForm.hrId;
+    if (!managerId) {
+      setError(role === 'MANAGER' ? 'Select the HR this manager reports to.' : 'Select a reporting manager or HR.');
+      return;
+    }
+    setLineSaving(true);
+    setError('');
+    try {
+      await api(`/employees/${id}`, { method: 'PATCH', body: { managerId } });
+      setEditingLine(false);
+      await load();
+    } catch (err) {
+      setError(err.message || 'Could not update the reporting line.');
+    } finally {
+      setLineSaving(false);
+    }
+  }
   const canResetThis = canReset && employee?.userAccount && role !== 'SUPER_ADMIN' && !(user?.role === 'HR_ADMIN' && role === 'HR_ADMIN');
   const canDeleteThis = isSuperAdmin && employee && role !== 'SUPER_ADMIN' && employee.id !== user?.employeeId;
 
   return (
     <div className="space-y-6">
+      {confirmDialog}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link to={backPath} className="inline-flex items-center gap-2 text-sm font-semibold text-muted transition hover:text-text">
           <ArrowLeft size={16} />
@@ -157,7 +218,7 @@ export default function EmployeeProfile() {
           </Section>
 
           <Section title="Personal details (filled by the employee)">
-            <Field label="Mobile" value={employee.mobile} />
+            <Field label="Mobile" value={employee.mobile ? (/^\d{10}$/.test(employee.mobile) ? `+91 ${employee.mobile}` : employee.mobile) : null} />
             <Field label="Date of birth" value={formatDate(employee.dateOfBirth)} />
             <Field label="Personal address" value={employee.personalAddress} />
           </Section>
@@ -165,7 +226,67 @@ export default function EmployeeProfile() {
           <Section title="Employment">
             <Field label="Department" value={employee.department?.name} />
             <Field label="Designation" value={employee.designation?.title} />
-            <Field label="Reporting manager" value={employee.manager ? `${employee.manager.fullName} (${employee.manager.employeeCode})` : 'Independent'} />
+            {role === 'HR_ADMIN' && <Field label="Reports to" value="Super Admin" />}
+            {role !== 'HR_ADMIN' && !editingLine && (
+              <>
+                {role === 'EMPLOYEE' && <Field label="Reporting manager" value={personLabel(reportingManager) || 'Not assigned'} />}
+                <Field label="Reporting HR" value={personLabel(reportingHr) || 'Not assigned'} />
+              </>
+            )}
+            {canEditLine && editingLine && (
+              <form onSubmit={saveLine} className="space-y-4 rounded-xl border border-border bg-surface-2/40 p-4 sm:col-span-2 lg:col-span-3">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {role === 'EMPLOYEE' && (
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted">Reporting Manager</label>
+                      <select
+                        value={lineForm.managerId}
+                        onChange={(e) => {
+                          const m = managerChoices.find((x) => x.id === e.target.value);
+                          setLineForm({ managerId: e.target.value, hrId: m?.managerId || '' });
+                        }}
+                        className="mt-1.5 w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm outline-none focus:border-accent"
+                      >
+                        <option value="">None (report directly to HR)</option>
+                        {managerChoices.map((m) => <option key={m.id} value={m.id}>{m.fullName} ({m.employeeCode})</option>)}
+                      </select>
+                    </div>
+                  )}
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted">Reporting HR</label>
+                    {role === 'EMPLOYEE' && pickedManager ? (
+                      <div className="mt-1.5 w-full rounded-xl border border-border bg-surface-2/60 px-3.5 py-2.5 text-sm font-semibold">
+                        {pickedManagerHr ? personLabel(pickedManagerHr) : 'No HR linked to this manager'}
+                      </div>
+                    ) : (
+                      <select
+                        required
+                        value={lineForm.hrId}
+                        onChange={(e) => setLineForm({ ...lineForm, hrId: e.target.value })}
+                        className="mt-1.5 w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm outline-none focus:border-accent"
+                      >
+                        <option value="">Select HR</option>
+                        {hrChoices.map((m) => <option key={m.id} value={m.id}>{m.fullName} ({m.employeeCode})</option>)}
+                      </select>
+                    )}
+                  </div>
+                </div>
+                {role === 'EMPLOYEE' && pickedManager && !pickedManagerHr && (
+                  <p className="text-xs text-danger">This manager has no HR yet. Link the manager to an HR first, or choose "None" and pick an HR directly.</p>
+                )}
+                <div className="flex justify-end gap-3">
+                  <button type="button" onClick={() => setEditingLine(false)} className="rounded-xl border border-border px-4 py-2 text-sm font-semibold text-muted transition hover:bg-surface-2">Cancel</button>
+                  <button type="submit" disabled={lineSaving || (role === 'EMPLOYEE' && pickedManager && !pickedManagerHr)} className="rounded-xl bg-accent px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-accent/90 disabled:opacity-50">
+                    {lineSaving ? 'Saving…' : 'Save reporting line'}
+                  </button>
+                </div>
+              </form>
+            )}
+            {canEditLine && !editingLine && (
+              <div className="flex items-end">
+                <button type="button" onClick={startEditLine} className="rounded-xl border border-border px-3.5 py-2 text-xs font-semibold transition hover:bg-surface-2">Edit reporting line</button>
+              </div>
+            )}
             <Field label="Employment type" value={EMPLOYMENT_LABELS[employee.employmentType] || employee.employmentType} />
             <Field label="Joining date" value={formatDate(employee.joiningDate)} />
             <Field label="Probation ends" value={formatDate(employee.probationEndDate)} />

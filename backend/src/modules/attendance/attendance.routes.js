@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../../lib/prisma.js';
 import { requireAuth, logAudit } from '../../middleware/auth.js';
 import { getCompanyTodayDateString, parseDateOnly } from '../../lib/dateUtils.js';
+import { getVirtualAbsences, loadCalendarSettings, statusForMissingRecord } from '../../lib/attendanceCalendar.js';
 
 export function attendanceRouter() {
   const router = Router();
@@ -15,6 +16,39 @@ export function attendanceRouter() {
     }
     return user.employee;
   };
+
+  const getCheckInStatus = async (at) => {
+    const rows = await prisma.organizationSetting.findMany({ where: { key: { in: ['workStart', 'graceMinutes', 'timezone'] } } });
+    const settings = Object.fromEntries(rows.map((row) => [row.key, row.value]));
+    const [hour, minute] = String(settings.workStart || '09:30').split(':').map(Number);
+    const grace = Math.max(0, Number(settings.graceMinutes ?? 15));
+    const zone = String(settings.timezone || 'Asia/Kolkata');
+    const parts = new Intl.DateTimeFormat('en-GB', { timeZone: zone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(at);
+    const localMinutes = Number(parts.find((part) => part.type === 'hour')?.value || 0) * 60 + Number(parts.find((part) => part.type === 'minute')?.value || 0);
+    const threshold = (Number.isFinite(hour) ? hour : 9) * 60 + (Number.isFinite(minute) ? minute : 30) + grace;
+    return localMinutes > threshold ? 'LATE' : 'PRESENT';
+  };
+
+
+  // GET /api/attendance/team-date?date=YYYY-MM-DD
+  // Organization-wide for Super Admin; HR sees only direct reports and their teams.
+  router.get('/team-date', requireAuth, async (req, res, next) => {
+    try {
+      if (!['SUPER_ADMIN', 'HR_ADMIN'].includes(req.user.role)) return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Attendance overview is not available for this role.' } });
+      const dateText = typeof req.query.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date) ? req.query.date : getCompanyTodayDateString();
+      const date = parseDateOnly(dateText);
+      let employeeWhere = { isActive: true, status: { not: 'EXITED' } };
+      // HR Admin and Super Admin see every employee and manager.
+      const employees = await prisma.employee.findMany({ where: employeeWhere, include: { department: { select: { name: true } }, userAccount: { select: { role: true } }, attendance: { where: { date }, take: 1 } }, orderBy: { fullName: 'asc' } });
+      const calendarSettings = await loadCalendarSettings();
+      const records = await Promise.all(employees.map(async (e) => {
+        const r = e.attendance[0];
+        const status = r?.status || await statusForMissingRecord({ employee: e, dateStr: dateText, settings: calendarSettings });
+        return { employeeId: e.id, employeeCode: e.employeeCode, employeeName: e.fullName, role: e.userAccount?.role || 'EMPLOYEE', department: e.department?.name || 'Unassigned', date: dateText, checkIn: r?.firstIn || null, checkOut: r?.lastOut || null, status };
+      }));
+      return res.json({ date: dateText, records });
+    } catch (error) { return next(error); }
+  });
 
   // GET /api/attendance/today: current user's today status
   router.get('/today', requireAuth, async (req, res, next) => {
@@ -138,6 +172,22 @@ export function attendanceRouter() {
         status: r.status,
       }));
 
+      // Working days with no check-in, leave or holiday are ABSENT (derived, not stored).
+      let scopeIds = null;
+      if (typeof whereClause.employeeId === 'string') scopeIds = [whereClause.employeeId];
+      else if (whereClause.employeeId?.in) scopeIds = whereClause.employeeId.in;
+      const people = await prisma.employee.findMany({
+        where: { isActive: true, status: { not: 'EXITED' }, ...(scopeIds ? { id: { in: scopeIds } } : {}) },
+        select: { id: true, employeeCode: true, fullName: true, createdAt: true, workLocation: true, department: { select: { name: true } } },
+      });
+      const absences = await getVirtualAbsences({ employees: people, from: startDate, to: new Date(endDate.getTime() - 86400000) });
+      const peopleById = new Map(people.map((e) => [e.id, e]));
+      absences.forEach((a) => {
+        const e = peopleById.get(a.employeeId);
+        formatted.push({ id: `absent-${a.employeeId}-${a.date}`, employeeId: a.employeeId, employeeName: e.fullName, employeeCode: e.employeeCode, department: e.department?.name || null, date: a.date, firstIn: null, lastOut: null, status: 'ABSENT', derived: true });
+      });
+      formatted.sort((x, y) => y.date.localeCompare(x.date) || String(x.employeeName).localeCompare(String(y.employeeName)));
+
       // Calculate summary
       const presentCount = formatted.filter((r) => ['PRESENT', 'LATE'].includes(r.status)).length;
       const missingPunchCount = formatted.filter((r) => r.status === 'MISSING_PUNCH' || (r.firstIn && !r.lastOut)).length;
@@ -147,6 +197,7 @@ export function attendanceRouter() {
         summary: {
           totalDays: formatted.length,
           presentDays: presentCount,
+          absentDays: formatted.filter((r) => r.status === 'ABSENT').length,
           missingPunches: missingPunchCount,
         },
       });
@@ -162,6 +213,7 @@ export function attendanceRouter() {
       const todayStr = getCompanyTodayDateString();
       const todayDate = parseDateOnly(todayStr);
       const now = new Date();
+      const checkInStatus = await getCheckInStatus(now);
 
       const existing = await prisma.attendanceRecord.findUnique({
         where: {
@@ -195,13 +247,13 @@ export function attendanceRouter() {
           },
           update: {
             firstIn: now,
-            status: 'PRESENT',
+            status: checkInStatus,
           },
           create: {
             employeeId: employee.id,
             date: todayDate,
             firstIn: now,
-            status: 'PRESENT',
+            status: checkInStatus,
           },
         });
 
@@ -212,7 +264,7 @@ export function attendanceRouter() {
         action: 'ATTENDANCE_CHECK_IN',
         entityType: 'AttendanceRecord',
         entityId: result.record.id,
-        after: { firstIn: now, status: 'PRESENT' },
+        after: { firstIn: now, status: checkInStatus },
       });
 
       return res.json({
@@ -269,7 +321,7 @@ export function attendanceRouter() {
           where: { id: existing.id },
           data: {
             lastOut: now,
-            status: 'PRESENT',
+            status: existing.status,
           },
         });
 
@@ -280,7 +332,7 @@ export function attendanceRouter() {
         action: 'ATTENDANCE_CHECK_OUT',
         entityType: 'AttendanceRecord',
         entityId: result.record.id,
-        after: { lastOut: now, status: 'PRESENT' },
+        after: { lastOut: now, status: existing.status },
       });
 
       return res.json({

@@ -356,6 +356,19 @@ model NotificationReadState {
   @@index([userId, readAt])
 }
 
+/// Places where the company operates. Employee.workLocation and Holiday.location store the location NAME
+/// ("All Locations" on a holiday means every location). Renaming a location cascades to both.
+model CompanyLocation {
+  id             String   @id @default(cuid())
+  name           String   @unique
+  city           String?
+  state          String?
+  isHeadquarters Boolean  @default(false)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
 /// Key/value business settings: workplace name, timezone, grace period ... (persisted, FR settings requirement).
 model OrganizationSetting {
   key       String   @id

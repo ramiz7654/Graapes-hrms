@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../../lib/prisma.js';
 import { requireAuth, requireRoles } from '../../middleware/auth.js';
+import { getVirtualAbsences, loadCalendarSettings } from '../../lib/attendanceCalendar.js';
 
 export function reportsRouter() {
   const router = Router();
@@ -185,6 +186,19 @@ export function reportsRouter() {
         lastOut: r.lastOut ? new Date(r.lastOut).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—',
         status: r.status,
       }));
+
+      // Working days with no check-in, leave or holiday are ABSENT (derived, not stored).
+      const people = await prisma.employee.findMany({
+        where: { isActive: true, status: { not: 'EXITED' }, ...employeeFilter },
+        select: { id: true, employeeCode: true, fullName: true, createdAt: true, workLocation: true, department: { select: { name: true } } },
+      });
+      const absences = await getVirtualAbsences({ employees: people, from: startDate, to: new Date(endDate.getTime() - 86400000), settings: await loadCalendarSettings() });
+      const peopleById = new Map(people.map((e) => [e.id, e]));
+      absences.forEach((a) => {
+        const e = peopleById.get(a.employeeId);
+        data.push({ date: a.date, employeeCode: e.employeeCode, fullName: e.fullName, department: e.department?.name || 'General', firstIn: '—', lastOut: '—', status: 'ABSENT' });
+      });
+      data.sort((a, b) => b.date.localeCompare(a.date) || String(a.fullName).localeCompare(String(b.fullName)));
 
       if (format === 'csv') {
         const headers = [

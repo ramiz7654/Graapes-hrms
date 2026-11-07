@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../services/api.js';
 import { useAuth } from '../../app/AuthContext.jsx';
+import { useConfirm } from '../../components/ConfirmDialog.jsx';
 
 export default function HolidaysPage() {
   const { user } = useAuth();
@@ -21,6 +22,8 @@ export default function HolidaysPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [locations, setLocations] = useState([]);
+  const { confirm, confirmDialog } = useConfirm();
 
   const [form, setForm] = useState({
     name: '',
@@ -36,6 +39,10 @@ export default function HolidaysPage() {
     try {
       const res = await api('/holidays');
       setHolidays(res.holidays || []);
+      if (isAdmin) {
+        const opts = await api('/organization/options').catch(() => ({ locations: [] }));
+        setLocations(opts.locations || []);
+      }
     } catch (err) {
       setError(err.message || 'Unable to load company holidays.');
     } finally {
@@ -68,7 +75,8 @@ export default function HolidaysPage() {
   }
 
   async function handleDelete(id) {
-    if (!window.confirm('Are you sure you want to delete this holiday?')) return;
+    const ok = await confirm({ title: 'Delete holiday', message: 'Are you sure you want to delete this holiday? It will disappear from every employee\'s calendar.', confirmLabel: 'Yes, Delete', danger: true });
+    if (!ok) return;
     setActionLoading(true);
     try {
       await api(`/holidays/${id}`, { method: 'DELETE' });
@@ -85,6 +93,7 @@ export default function HolidaysPage() {
 
   return (
     <div className="space-y-6">
+      {confirmDialog}
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -232,13 +241,19 @@ export default function HolidaysPage() {
               </div>
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-muted">Location / Branch</label>
-                <input
-                  type="text"
-                  placeholder="All Locations"
+                <select
                   value={form.location}
                   onChange={(e) => setForm({ ...form, location: e.target.value })}
                   className="mt-1.5 w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm outline-none focus:border-accent"
-                />
+                >
+                  <option value="All Locations">All Locations</option>
+                  {locations.map((l) => (
+                    <option key={l.id} value={l.name}>
+                      {l.name}{l.city || l.state ? ` (${[l.city, l.state].filter(Boolean).join(', ')})` : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1.5 text-xs text-muted">Pick one location to make this a holiday only for employees working there.</p>
               </div>
               <div className="flex items-center justify-end gap-3 pt-3">
                 <button

@@ -3,6 +3,7 @@ import { Save, UserRound, BriefcaseBusiness, ShieldCheck, RefreshCw } from 'luci
 import { api } from '../../services/api.js';
 import { useAuth } from '../../app/AuthContext.jsx';
 import ChangePasswordCard from './ChangePasswordCard.jsx';
+import PhoneInput, { sanitizeMobile } from '../../components/PhoneInput.jsx';
 
 const emptyForm = {
   fullName: '', mobile: '', personalAddress: '', dateOfBirth: '', workLocation: '',
@@ -35,15 +36,17 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [locations, setLocations] = useState([]);
 
   async function loadProfile() {
     setLoading(true); setError('');
     try {
+      api('/organization/options').then((res) => setLocations(res.locations || [])).catch(() => setLocations([]));
       const { profile: data } = await api('/auth/profile');
       setProfile(data);
       setForm({
         fullName: data.employee?.fullName || data.fullName || '',
-        mobile: data.employee?.mobile || '',
+        mobile: sanitizeMobile(data.employee?.mobile),
         personalAddress: data.employee?.personalAddress || '',
         dateOfBirth: asDate(data.employee?.dateOfBirth),
         workLocation: data.employee?.workLocation || '',
@@ -78,14 +81,26 @@ export default function ProfilePage() {
   const isSuperAdmin = String(profile.role || '').toUpperCase() === 'SUPER_ADMIN';
   return <div className="w-full min-w-0 space-y-6">
     <form onSubmit={onSubmit} className="space-y-6 rounded-2xl border border-border bg-surface p-5 sm:p-7">
-      <div className="flex flex-wrap items-center gap-4 border-b border-border pb-5"><div className="grid h-14 w-14 place-items-center rounded-2xl bg-accent-soft text-accent"><UserRound size={26}/></div><div className="min-w-0 flex-1"><p className="text-xs font-bold uppercase tracking-wider text-accent">Account settings · {roleLabel(profile.role)}</p><h2 className="mt-1 text-xl font-bold">My Profile</h2><p className="mt-1 break-all text-sm text-muted">{profile.email}</p></div>{!isSuperAdmin && <div className="grid gap-2 text-xs text-muted sm:text-right"><span>Employee ID: <b className="text-text">{employee?.employeeCode || 'Not assigned'}</b></span><span>Department: <b className="text-text">{employee?.department || 'Not assigned'}</b></span><span>Designation: <b className="text-text">{employee?.designation || 'Not assigned'}</b></span></div>}</div><div><h3 className="text-lg font-bold">Personal details</h3><p className="mt-1 text-sm text-muted">Update your personal information below.{!isSuperAdmin && ' Work email and Employee ID are managed by HR.'}</p></div>
+      <div className="flex min-w-0 flex-wrap items-center gap-4 border-b border-border pb-5"><div className="grid h-14 w-14 place-items-center rounded-2xl bg-accent-soft text-accent"><UserRound size={26}/></div><div className="min-w-0 flex-1"><p className="text-xs font-bold uppercase tracking-wider text-accent">Account settings · {roleLabel(profile.role)}</p><h2 className="mt-1 text-xl font-bold">My Profile</h2><p className="profile-email mt-1 text-sm text-muted">{profile.email}</p></div>{!isSuperAdmin && <div className="grid gap-2 text-xs text-muted sm:text-right"><span>Employee ID: <b className="text-text">{employee?.employeeCode || 'Not assigned'}</b></span><span>Department: <b className="text-text">{employee?.department || 'Not assigned'}</b></span><span>Designation: <b className="text-text">{employee?.designation || 'Not assigned'}</b></span></div>}</div><div><h3 className="text-lg font-bold">Personal details</h3><p className="mt-1 text-sm text-muted">Update your personal information below.{!isSuperAdmin && ' Work email and Employee ID are managed by HR.'}</p></div>
       {error && <p role="alert" className="rounded-xl bg-danger-soft p-3 text-sm text-danger">{error}</p>}
       {success && <p role="status" className="rounded-xl border border-green-500/30 bg-green-500/10 p-3 text-sm text-green-700">{success}</p>}
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Full name" name="fullName" value={form.fullName} onChange={onChange} placeholder="Enter full name" />
-        <Field label="Mobile number" name="mobile" value={form.mobile} onChange={onChange} placeholder="Enter mobile number" />
+        <label className="block">
+          <span className="mb-1.5 block text-sm font-medium">Mobile number</span>
+          <PhoneInput className="" value={form.mobile} onChange={(mobile) => { setForm((current) => ({ ...current, mobile })); setSuccess(''); }} />
+        </label>
         <Field label="Date of birth" name="dateOfBirth" type="date" value={form.dateOfBirth} onChange={onChange} />
-        {employee?.id && <Field label="Work location" name="workLocation" value={form.workLocation} onChange={onChange} placeholder="Office / city" />}
+        {employee?.id && (
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium">Work location</span>
+            <select name="workLocation" value={form.workLocation} onChange={onChange}
+              className="w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm text-text outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20">
+              {!locations.some((l) => l.name === form.workLocation) && <option value={form.workLocation}>{form.workLocation || 'Select location'}</option>}
+              {locations.map((l) => <option key={l.id} value={l.name}>{l.name}{l.city || l.state ? ` (${[l.city, l.state].filter(Boolean).join(', ')})` : ''}</option>)}
+            </select>
+          </label>
+        )}
         <Field label="Personal address" name="personalAddress" value={form.personalAddress} onChange={onChange} placeholder="Enter your address" wide />
       </div>
       {employee?.id && <div className="border-t border-border pt-5">
