@@ -8,16 +8,21 @@ import {
   RefreshCw,
   AlertCircle,
   CheckCircle2,
-  Calendar,
+  Trash2,
 } from 'lucide-react';
 import { api } from '../../services/api.js';
 import { useAuth } from '../../app/AuthContext.jsx';
+import { useConfirm } from '../../components/ConfirmDialog.jsx';
+
+const ALLOWED_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'doc', 'docx'];
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
 
 const ALLOWED_EXTENSIONS = ['pdf', 'png', 'jpg', 'jpeg', 'doc', 'docx'];
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 
 export default function DocumentsPage() {
   const { user } = useAuth();
+  const { confirm, confirmDialog } = useConfirm();
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -97,6 +102,23 @@ export default function DocumentsPage() {
     }
   }
 
+<<<<<<< Updated upstream
+=======
+  async function deleteDocument(doc) {
+    const ok = await confirm({ title: 'Delete document', message: `Delete "${doc.title}"? The uploaded file will be removed permanently.`, confirmLabel: 'Yes, Delete', danger: true });
+    if (!ok) return;
+    setError('');
+    setSuccess('');
+    try {
+      await api(`/documents/${doc.id}`, { method: 'DELETE' });
+      setSuccess('Document deleted.');
+      await loadData();
+    } catch (err) {
+      setError(err.message || 'Could not delete the document.');
+    }
+  }
+
+>>>>>>> Stashed changes
   async function handleAddDocument(e) {
     e.preventDefault();
     if (!form.file) {
@@ -181,6 +203,7 @@ export default function DocumentsPage() {
                 <th className="pb-3">File Reference</th>
                 <th className="pb-3">Uploaded Date</th>
                 <th className="pb-3">Access Level</th>
+                <th className="pb-3 text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -221,11 +244,18 @@ export default function DocumentsPage() {
                       <CheckCircle2 size={12} /> Confidential
                     </span>
                   </td>
+                  <td className="py-3.5 text-right">
+                    {d.canDelete && (
+                      <button type="button" onClick={() => deleteDocument(d)} title="Delete document" aria-label={`Delete ${d.title}`} className="inline-flex items-center gap-1.5 rounded-lg border border-danger/30 px-2.5 py-1.5 text-xs font-semibold text-danger transition hover:bg-danger-soft">
+                        <Trash2 size={14} /> Delete
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
               {!loading && documents.length === 0 && (
                 <tr>
-                  <td colSpan="5" className="py-8 text-center text-muted">
+                  <td colSpan="6" className="py-8 text-center text-muted">
                     No documents uploaded yet.
                   </td>
                 </tr>
@@ -234,6 +264,8 @@ export default function DocumentsPage() {
           </table>
         </div>
       </section>
+
+      {confirmDialog}
 
       {/* Add Document Modal */}
       {showAddModal && (

@@ -60,6 +60,12 @@ function nextOccurrence(date, today) {
   return { candidate, daysAway };
 }
 
+<<<<<<< Updated upstream
+=======
+// Active designations (those tied to an inactive department are not usable, so they are not counted).
+const activeDesignationCount = () => prisma.designation.count({ where: { isActive: true, OR: [{ departmentId: null }, { department: { isActive: true } }] } });
+
+>>>>>>> Stashed changes
 async function buildAnalytics(user) {
   const todayStr = getCompanyTodayDateString();
   const today = parseDateOnly(todayStr);
@@ -240,6 +246,7 @@ async function buildAnalytics(user) {
   const nextHoliday = holidays[0] || null;
   let stats;
   if (user.role === 'SUPER_ADMIN') {
+<<<<<<< Updated upstream
     const [departmentCount, activeAccounts] = await Promise.all([
       prisma.department.count({ where: { isActive: true } }),
       prisma.userAccount.count({ where: { isActive: true } }),
@@ -247,6 +254,16 @@ async function buildAnalytics(user) {
     stats = { totalEmployees: employees.length, departments: departmentCount, activeAccounts, pendingAdminIssues: pendingLeaves + pendingCorrections, presentToday };
   } else if (user.role === 'HR_ADMIN') {
     stats = { totalEmployees: employees.length, departments: departments.filter((d) => d.name !== 'Unassigned').length, presentToday, pendingLeaves, pendingCorrections, upcomingHolidays: holidays.length };
+=======
+    const [departmentCount, designationCount, activeAccounts] = await Promise.all([
+      prisma.department.count({ where: { isActive: true } }),
+      activeDesignationCount(),
+      prisma.userAccount.count({ where: { isActive: true } }),
+    ]);
+    stats = { totalEmployees: employees.length, departments: departmentCount, designations: designationCount, activeAccounts, pendingAdminIssues: pendingLeaves + pendingCorrections, presentToday };
+  } else if (user.role === 'HR_ADMIN') {
+    stats = { totalEmployees: employees.length, departments: departments.filter((d) => d.name !== 'Unassigned').length, designations: await activeDesignationCount(), presentToday, pendingLeaves, pendingCorrections, upcomingHolidays: holidays.length };
+>>>>>>> Stashed changes
   } else if (user.role === 'MANAGER') {
     stats = {
       teamMembers: employees.length,

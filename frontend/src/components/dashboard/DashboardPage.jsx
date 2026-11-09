@@ -514,7 +514,11 @@ export default function DashboardPage({ config }) {
         <p className="mt-2 max-w-2xl text-sm text-muted">{config.subtitle}</p>
       </section>
 
+<<<<<<< Updated upstream
       <section aria-label="Dashboard summary" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+=======
+      <section aria-label="Dashboard summary" className={`grid grid-cols-1 gap-3 sm:grid-cols-2 ${config.stats.length > 4 ? 'xl:grid-cols-5' : 'xl:grid-cols-4'}`}>
+>>>>>>> Stashed changes
         {config.stats.map((item) => <StatCard key={item.label} item={item} stats={stats} analytics={analytics} loadState={loadState} />)}
       </section>
 

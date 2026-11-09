@@ -16,7 +16,7 @@ import { useAuth } from '../../app/AuthContext.jsx';
 
 export default function LeaveManagement() {
   const { user } = useAuth();
-  const [tab, setTab] = useState('my-leaves'); // 'my-leaves' | 'approvals'
+  const [tab, setTab] = useState(user?.role === 'SUPER_ADMIN' ? 'approvals' : 'my-leaves'); // 'my-leaves' | 'approvals'
   const [balances, setBalances] = useState([]);
   const [leaveTypes, setLeaveTypes] = useState([]);
   const [requests, setRequests] = useState([]);
@@ -36,7 +36,7 @@ export default function LeaveManagement() {
     reason: '',
   });
 
-  // Super Admin only oversees leave; they do not apply for leave themselves.
+  // The Super Admin account has no employee record (no leave balance), so it only oversees and approves leave.
   const canApply = user?.role !== 'SUPER_ADMIN';
   const isApproverRole = ['SUPER_ADMIN', 'HR_ADMIN', 'MANAGER'].includes(user?.role);
 
@@ -156,10 +156,10 @@ export default function LeaveManagement() {
             <span>Leave Management & Approvals</span>
           </div>
           <h1 className="text-2xl font-bold tracking-tight">Leave Portal</h1>
-          <p className="mt-1 text-sm text-muted">Track balances, apply for time off, and manage team approvals.</p>
+          <p className="mt-1 text-sm text-muted">{canApply ? 'Track balances, apply for time off, and manage team approvals.' : 'Review and approve leave requests across the organization.'}</p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
             onClick={loadData}
@@ -197,7 +197,7 @@ export default function LeaveManagement() {
       )}
 
       {/* Leave Balance Cards */}
-      <section aria-label="Leave Balances" className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      {canApply && <section aria-label="Leave Balances" className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {balances.map((bal) => (
           <article key={bal.code} className="rounded-2xl border border-border bg-surface p-5 shadow-card">
             <div className="flex items-center justify-between">
@@ -219,11 +219,11 @@ export default function LeaveManagement() {
             No active leave balance configured.
           </div>
         )}
-      </section>
+      </section>}
 
       {/* Tabs */}
       <div className="flex border-b border-border">
-        <button
+        {canApply && <button
           type="button"
           onClick={() => setTab('my-leaves')}
           className={`border-b-2 px-5 py-3 text-sm font-semibold transition ${
@@ -231,7 +231,7 @@ export default function LeaveManagement() {
           }`}
         >
           My Requests ({myRequests.length})
-        </button>
+        </button>}
         {isApproverRole && (
           <button
             type="button"
@@ -251,7 +251,7 @@ export default function LeaveManagement() {
       </div>
 
       {/* Tab 1: My Requests */}
-      {tab === 'my-leaves' && (
+      {tab === 'my-leaves' && canApply && (
         <section className="rounded-2xl border border-border bg-surface p-5 shadow-card sm:p-6">
           <h2 className="text-base font-bold">My Leave History</h2>
           <div className="mt-4 overflow-x-auto">

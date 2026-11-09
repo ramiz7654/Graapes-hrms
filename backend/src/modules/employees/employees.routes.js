@@ -98,7 +98,7 @@ export function employeesRouter() {
           departmentId: e.departmentId,
           designation: e.designation?.title || 'Unassigned',
           designationId: e.designationId,
-          manager: e.manager?.fullName || 'None',
+          manager: e.manager?.fullName || (e.userAccount?.role === 'HR_ADMIN' ? 'Super Admin' : 'None'),
           managerId: e.managerId,
           role: e.userAccount?.role || 'EMPLOYEE',
           accountActive: e.userAccount?.isActive ?? e.isActive,
@@ -314,6 +314,11 @@ export function employeesRouter() {
         return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Employee not found.' } });
       }
 
+      // HR Admin manages Employees and Managers only; HR and Super Admin profiles are Super Admin territory.
+      if (req.user.role === 'HR_ADMIN' && ['HR_ADMIN', 'SUPER_ADMIN'].includes(employee.userAccount?.role) && employee.id !== req.user.employee?.id) {
+        return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Only the Super Admin can edit an HR Admin profile.' } });
+      }
+
       const updateData = {};
       const allowed = ['fullName', 'mobile', 'workLocation', 'departmentId', 'designationId', 'managerId', 'employmentType', 'status'];
 
@@ -323,6 +328,26 @@ export function employeesRouter() {
         }
       }
 
+<<<<<<< Updated upstream
+=======
+      for (const key of ['joiningDate', 'probationEndDate']) {
+        if (body[key] === undefined) continue;
+        if (body[key] === '' || body[key] === null) {
+          if (key === 'joiningDate') return res.status(400).json({ error: { code: 'INVALID_DATE', message: 'Joining date is required.' } });
+          updateData[key] = null;
+          continue;
+        }
+        const text = String(body[key]).slice(0, 10);
+        const parsed = /^\d{4}-\d{2}-\d{2}$/.test(text) ? parseDateOnly(text) : null;
+        if (!parsed || Number.isNaN(parsed.getTime())) return res.status(400).json({ error: { code: 'INVALID_DATE', message: `Enter a valid ${key === 'joiningDate' ? 'joining' : 'probation end'} date.` } });
+        updateData[key] = parsed;
+      }
+
+      if (updateData.employmentType !== undefined && !['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN'].includes(updateData.employmentType)) {
+        return res.status(400).json({ error: { code: 'INVALID_INPUT', message: 'Choose a valid employment type.' } });
+      }
+
+>>>>>>> Stashed changes
       if (updateData.mobile !== undefined) {
         const mobileCheck = normalizeIndianMobile(updateData.mobile);
         if (!mobileCheck.ok) return res.status(400).json({ error: { code: 'INVALID_MOBILE', message: mobileCheck.message } });

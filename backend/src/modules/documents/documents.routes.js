@@ -19,33 +19,53 @@ const FILE_TYPES = {
   '.docx': { mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', magic: [[0x50, 0x4b, 0x03, 0x04]] },
 };
 
+<<<<<<< Updated upstream
+=======
+/**
+ * Who may see (and remove) a document, decided by the OWNER's role:
+ *  - the owner always can
+ *  - Super Admin can see everything
+ *  - HR Admin can see Employee / Manager / Finance documents, but NOT another HR Admin's or the Super Admin's
+ * Managers and employees only ever see their own.
+ */
+const PRIVATE_TO_SUPER_ADMIN = ['HR_ADMIN', 'SUPER_ADMIN'];
+function canAccessDocument(user, ownerEmployeeId, ownerRole) {
+  if (user.employee?.id && user.employee.id === ownerEmployeeId) return true;
+  if (user.role === 'SUPER_ADMIN') return true;
+  if (user.role === 'HR_ADMIN') return !PRIVATE_TO_SUPER_ADMIN.includes(ownerRole || 'EMPLOYEE');
+  return false;
+}
+const DOCUMENT_INCLUDE = {
+  employee: { select: { id: true, fullName: true, employeeCode: true, userAccount: { select: { role: true } } } },
+};
+
+>>>>>>> Stashed changes
 export function documentsRouter() {
   const router = Router();
 
-  // GET /api/documents
+  // GET /api/documents            -> everything the signed-in user may see
+  // GET /api/documents?employeeId= -> only that employee's documents (profile view)
   router.get('/', requireAuth, async (req, res, next) => {
     try {
       const { user } = req;
-      let whereClause = {};
+      const ownId = user.employee?.id || 'none';
+      const employeeId = typeof req.query.employeeId === 'string' && req.query.employeeId ? req.query.employeeId : null;
 
-      if (['SUPER_ADMIN', 'HR_ADMIN'].includes(user.role)) {
-        whereClause = { deletedAt: null };
-      } else {
-        whereClause = {
-          employeeId: user.employee?.id || 'none',
+      let where = { deletedAt: null };
+      if (user.role === 'SUPER_ADMIN') {
+        if (employeeId) where.employeeId = employeeId;
+      } else if (user.role === 'HR_ADMIN') {
+        where = {
           deletedAt: null,
+          ...(employeeId ? { employeeId } : {}),
+          OR: [{ employeeId: ownId }, { employee: { userAccount: { role: { notIn: PRIVATE_TO_SUPER_ADMIN } } } }],
         };
+      } else {
+        where.employeeId = ownId;
+        if (employeeId && employeeId !== ownId) return res.json({ documents: [] });
       }
 
-      const documents = await prisma.employeeDocument.findMany({
-        where: whereClause,
-        include: {
-          employee: {
-            select: { id: true, fullName: true, employeeCode: true },
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-      });
+      const documents = await prisma.employeeDocument.findMany({ where, include: DOCUMENT_INCLUDE, orderBy: { createdAt: 'desc' } });
 
       return res.json({
         documents: documents.map((d) => ({
@@ -58,6 +78,7 @@ export function documentsRouter() {
           fileName: d.fileName,
           sizeBytes: d.sizeBytes,
           createdAt: d.createdAt,
+          canDelete: canAccessDocument(user, d.employeeId, d.employee?.userAccount?.role),
         })),
       });
     } catch (error) {
@@ -126,10 +147,16 @@ export function documentsRouter() {
   // GET /api/documents/:id/download: owner, HR Admin or Super Admin only.
   router.get('/:id/download', requireAuth, async (req, res, next) => {
     try {
+<<<<<<< Updated upstream
       const document = await prisma.employeeDocument.findFirst({ where: { id: req.params.id, deletedAt: null } });
       if (!document) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Document not found.' } });
       const isAdmin = ['SUPER_ADMIN', 'HR_ADMIN'].includes(req.user.role);
       if (!isAdmin && document.employeeId !== req.user.employee?.id) {
+=======
+      const document = await prisma.employeeDocument.findFirst({ where: { id: req.params.id, deletedAt: null }, include: DOCUMENT_INCLUDE });
+      if (!document) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Document not found.' } });
+      if (!canAccessDocument(req.user, document.employeeId, document.employee?.userAccount?.role)) {
+>>>>>>> Stashed changes
         return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'You do not have access to this document.' } });
       }
       const file = path.resolve(UPLOAD_ROOT, document.storageKey);
@@ -140,6 +167,28 @@ export function documentsRouter() {
     } catch (error) {
       return next(error);
     }
+<<<<<<< Updated upstream
+=======
+  });
+
+  // DELETE /api/documents/:id: the owner, or whoever may see it (see canAccessDocument).
+  // The record is soft-deleted and the stored file is removed from disk.
+  router.delete('/:id', requireAuth, async (req, res, next) => {
+    try {
+      const document = await prisma.employeeDocument.findFirst({ where: { id: req.params.id, deletedAt: null }, include: DOCUMENT_INCLUDE });
+      if (!document) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Document not found.' } });
+      if (!canAccessDocument(req.user, document.employeeId, document.employee?.userAccount?.role)) {
+        return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'You cannot delete this document.' } });
+      }
+      await prisma.employeeDocument.update({ where: { id: document.id }, data: { deletedAt: new Date() } });
+      const file = path.resolve(UPLOAD_ROOT, document.storageKey);
+      if (file.startsWith(UPLOAD_ROOT + path.sep)) await fs.rm(file, { force: true });
+      await logAudit(req, { action: 'DOCUMENT_DELETED', entityType: 'EmployeeDocument', entityId: document.id, before: { title: document.title, fileName: document.fileName } });
+      return res.json({ message: 'Document deleted.' });
+    } catch (error) {
+      return next(error);
+    }
+>>>>>>> Stashed changes
   });
 
   return router;

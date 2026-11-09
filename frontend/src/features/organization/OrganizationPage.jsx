@@ -213,7 +213,7 @@ export default function OrganizationPage() {
       {confirmDialog}
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           <div className="mb-1.5 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-accent">
             <Network size={16} />
             <span>Company Architecture</span>
@@ -222,7 +222,7 @@ export default function OrganizationPage() {
           <p className="mt-1 text-sm text-muted">Manage functional business departments, roles, and job designations.</p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
             onClick={loadData}
@@ -260,11 +260,11 @@ export default function OrganizationPage() {
       )}
 
       {/* Tabs */}
-      <div className="flex border-b border-border">
+      <div className="-mx-1 flex overflow-x-auto overflow-y-hidden border-b border-border px-1 [scrollbar-width:thin]" role="tablist">
         <button
           type="button"
           onClick={() => setTab('departments')}
-          className={`flex items-center gap-2 border-b-2 px-5 py-3 text-sm font-semibold transition ${
+          className={`flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-4 py-3 text-sm font-semibold transition sm:px-5 ${
             tab === 'departments' ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-text'
           }`}
         >
@@ -274,7 +274,7 @@ export default function OrganizationPage() {
         <button
           type="button"
           onClick={() => setTab('designations')}
-          className={`flex items-center gap-2 border-b-2 px-5 py-3 text-sm font-semibold transition ${
+          className={`flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-4 py-3 text-sm font-semibold transition sm:px-5 ${
             tab === 'designations' ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-text'
           }`}
         >
@@ -285,7 +285,11 @@ export default function OrganizationPage() {
           <button
             type="button"
             onClick={() => setTab('locations')}
+<<<<<<< Updated upstream
             className={`flex items-center gap-2 border-b-2 px-5 py-3 text-sm font-semibold transition ${
+=======
+            className={`flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-4 py-3 text-sm font-semibold transition sm:px-5 ${
+>>>>>>> Stashed changes
               tab === 'locations' ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-text'
             }`}
           >
