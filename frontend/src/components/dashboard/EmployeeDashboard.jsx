@@ -1,15 +1,19 @@
 import DashboardPage from './DashboardPage.jsx';
-import { BriefcaseBusiness, Building2, CalendarCheck, CalendarDays, ClipboardList, Clock3, FileBarChart, FolderLock, Megaphone, Network, Plane, ScrollText, Settings, ShieldCheck, UserCheck, Users } from 'lucide-react';
+import { CalendarCheck, CalendarDays, Clock3, Plane } from 'lucide-react';
 
 const config = {
- eyebrow: "EMPLOYEE", title: "My workspace", subtitle: "Your personal attendance, leave, documents and workplace updates in one place.",
- stats: [{ label: "My attendance", note: "Current records", icon: Users },
-{ label: "Available leave balance", note: "Today\u2019s summary", icon: Building2 },
-{ label: "Pending requests", note: "Needs attention", icon: UserCheck },
-{ label: "Next holiday", note: "Requires review", icon: Clock3 }],
- actions: [{ label: "My attendance", to: "/attendance", icon: Users },
-{ label: "Apply for leave", to: "/leave", icon: CalendarCheck },
-{ label: "Announcements", to: "/announcements", icon: Plane }],
- sections: [{ title: "Self-service", items: [{ title: "My profile", description: "View your own profile and job details" },{ title: "My attendance", description: "Check attendance history, working hours and corrections" },{ title: "Apply for leave", description: "Apply for leave and track approval status" }] }, { title: "Workplace information", items: [{ title: "My profile", description: "View your leave balance and applicable holiday calendar" },{ title: "My attendance", description: "Access documents shared with you" },{ title: "Apply for leave", description: "Read company announcements and policy updates" }] }]
+  role: 'EMPLOYEE',
+  eyebrow: 'EMPLOYEE',
+  title: 'My workspace',
+  subtitle: 'Your attendance, leave and company updates in one place.',
+  stats: [
+    { key: 'monthlyAttendance', label: 'Days worked this month', icon: CalendarCheck, note: 'Present and late days' },
+    { key: 'leaveBalance', label: 'Available leave balance', icon: Plane, format: 'days', note: 'Days remaining across leave types' },
+    { key: 'requestsInProgress', label: 'Pending requests', icon: Clock3, note: 'Waiting for approval' },
+    { key: 'nextHoliday', label: 'Next holiday', icon: CalendarDays, note: (s) => (s?.nextHolidayDate ? new Date(s.nextHolidayDate).toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'short', timeZone: 'UTC' }) : 'No holiday scheduled') },
+  ],
 };
-export default function EmployeeDashboard() { return <DashboardPage config={config} />; }
+
+export default function EmployeeDashboard() {
+  return <DashboardPage config={config} />;
+}

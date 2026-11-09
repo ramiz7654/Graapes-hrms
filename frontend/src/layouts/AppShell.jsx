@@ -426,6 +426,9 @@ function DesktopShell() {
 
   useEffect(() => {
     setDrawerOpen(false);
+    // Each route starts at the top; don't carry the previous page's scroll position.
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    document.querySelector('.desktop-main')?.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   }, [location.pathname]);
 
   useEffect(() => {

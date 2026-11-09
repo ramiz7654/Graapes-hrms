@@ -29,6 +29,12 @@
   margin-bottom: 24px;
 }
 
+.attendance-heading > div:first-child {
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+
 .attendance-heading h1 {
   display: flex;
   align-items: center;
@@ -50,6 +56,9 @@
 }
 
 .month-picker {
+  flex-direction: row;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
   gap: 10px;
   padding: 7px 10px;
   border: 1px solid #e3e8f2;
@@ -74,8 +83,8 @@
 .month-picker button {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   cursor: pointer;
 }
 
@@ -304,7 +313,8 @@
 
 .attendance-lower {
   display: grid;
-  grid-template-columns: minmax(270px, 0.85fr) minmax(0, 1.35fr);
+  /* Calendar spans the full width (short wide day boxes); history sits underneath. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 20px;
   align-items: start;
 }
@@ -350,11 +360,11 @@
 }
 
 .calendar-day.is-today {
-  color: #243ea8;
-  background: #e8edff;
-  border-color: #3f54bd;
+  color: #1d4ed8;
+  background: #dbeafe;
+  border-color: #2563eb;
   font-weight: 800;
-  box-shadow: 0 0 0 2px rgba(63, 84, 189, 0.12);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
 }
 
 .calendar-markers {
@@ -375,13 +385,13 @@
   border-radius: 50%;
 }
 
-.dot-present { background: #18b87a; }
-.dot-absent { background: #f04458; }
+.dot-present { background: #ec4899; }
+.dot-absent { background: #ef4444; }
 .dot-late { background: #efb832; }
-.dot-holiday { background: #1686f7; }
-.dot-leave { background: #8b5cf6; }
+.dot-holiday { background: #8b5cf6; }
+.dot-leave { background: #14b8a6; }
 .dot-pending-leave { background: #f59e0b; }
-.dot-today { background: #3f54bd; }
+.dot-today { background: #2563eb; }
 
 .calendar-legend {
   display: flex;
@@ -552,7 +562,14 @@
   }
 
   .attendance-heading h1 {
-    font-size: 23px;
+    gap: 9px;
+    font-size: 21px;
+    line-height: 1.25;
+  }
+
+  .attendance-heading p {
+    line-height: 1.45;
+    overflow-wrap: anywhere;
   }
 
   .attendance-summary {
@@ -710,7 +727,7 @@
 [data-theme="dark"] .my-attendance .calendar-day.is-today,
 .dark .my-attendance .calendar-day.is-today,
 .dark-theme .my-attendance .calendar-day.is-today {
-  background: #3f54bd;
+  background: #2563eb;
   color: #fff;
 }
 
@@ -785,7 +802,49 @@
 [data-theme="dark"] .my-attendance .calendar-day.is-today,
 .dark .my-attendance .calendar-day.is-today,
 .dark-theme .my-attendance .calendar-day.is-today {
-  color: #dbe4ff;
-  background: #273765;
-  border-color: #8094ff;
+  color: #dbeafe;
+  background: #1e3a8a;
+  border-color: #60a5fa;
 }
+
+
+/* Full-box day colours (same palette as the dashboard calendar). Kept last so they win over the dark-mode day rules. */
+.my-attendance .calendar-day {
+  justify-content: center;
+  min-height: 38px;
+  padding: 0;
+  font-weight: 650;
+}
+.my-attendance .calendar-day.fill,
+.my-attendance .calendar-day.fill.is-today {
+  color: #fff;
+  border-color: transparent;
+}
+.my-attendance .calendar-day.fill.fill-present { background: #ec4899; }
+.my-attendance .calendar-day.fill.fill-late { background: #f59e0b; }
+.my-attendance .calendar-day.fill.fill-absent { background: #ef4444; }
+.my-attendance .calendar-day.fill.fill-holiday { background: #8b5cf6; }
+.my-attendance .calendar-day.fill.fill-leave { background: #14b8a6; }
+.my-attendance .calendar-day.fill.fill-pending { background: repeating-linear-gradient(45deg, #14b8a6, #14b8a6 6px, #5eead4 6px, #5eead4 12px); }
+.my-attendance .calendar-day.fill.fill-today { background: #2563eb; }
+.my-attendance .calendar-day.fill.is-today {
+  box-shadow: 0 0 0 2px var(--surface-card, #fff), 0 0 0 4px #2563eb;
+}
+.my-attendance .calendar-day.is-today:not(.fill) {
+  color: #fff;
+  background: #2563eb;
+  border-color: transparent;
+}
+.calendar-legend i.sq {
+  flex: 0 0 11px;
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+}
+.sq-present { background: #ec4899; }
+.sq-absent { background: #ef4444; }
+.sq-late { background: #f59e0b; }
+.sq-holiday { background: #8b5cf6; }
+.sq-leave { background: #14b8a6; }
+.sq-pending { background: repeating-linear-gradient(45deg, #14b8a6, #14b8a6 3px, #5eead4 3px, #5eead4 6px); }
+.sq-today { background: #2563eb; }

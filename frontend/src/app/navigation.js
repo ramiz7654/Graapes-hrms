@@ -13,7 +13,6 @@ import {
   Activity,
   ShieldCheck,
   UserRound,
-  Building2,
 } from 'lucide-react';
 
 const createCommonNavigation = (dashboardPath) => [
@@ -36,6 +35,7 @@ export const ROLE_NAV = {
     ...createCommonNavigation('/dashboard/super-admin'),
     { to: '/organization', label: 'Organization', icon: Network },
     { to: '/holidays', label: 'Holiday calendar', icon: CalendarDays },
+    { to: '/announcements', label: 'Announcements', icon: Megaphone },
     { to: '/employees', label: 'Employee directory', icon: Users },
     { to: '/attendance', label: 'Attendance overview', icon: CalendarCheck },
     { to: '/leave', label: 'Leave overview', icon: Plane },
@@ -48,15 +48,15 @@ export const ROLE_NAV = {
 
   '/dashboard/hr-admin': [
     ...createCommonNavigation('/dashboard/hr-admin'),
-    { to: '/employees', label: 'Employee Management', icon: Users },
-    { to: '/organization', label: 'Departments & designations', icon: Building2 },
-    { to: '/attendance', label: 'Attendance management', icon: CalendarCheck },
-    { to: '/leave', label: 'Leave management', icon: Plane },
+    { to: '/employees', label: 'Employee directory', icon: Users },
+    { to: '/organization', label: 'Organization', icon: Network },
+    { to: '/attendance', label: 'Attendance overview', icon: CalendarCheck },
+    { to: '/leave', label: 'Leave overview', icon: Plane },
     { to: '/holidays', label: 'Holiday calendar', icon: CalendarDays },
     { to: '/documents', label: 'Employee documents', icon: FolderLock },
-    { to: '/reports', label: 'HR reports', icon: BarChart3 },
+    { to: '/reports', label: 'Organization reports', icon: BarChart3 },
     { to: '/announcements', label: 'Announcements', icon: Megaphone },
-    { to: '/settings', label: 'HR settings', icon: Settings },
+    { to: '/settings', label: 'Settings', icon: Settings },
     { to: '/status', label: 'System status', icon: Activity, built: true },
   ],
 

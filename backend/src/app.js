@@ -32,6 +32,8 @@ export function createApp({ checkDb }) {
   app.disable('x-powered-by');
   app.use(helmet());
   app.use(cors({ origin: env.WEB_ORIGIN, credentials: true }));
+  // Document uploads arrive as base64 JSON (max 5 MB file), so this route gets a larger body limit than the rest of the API.
+  app.use('/api/documents', express.json({ limit: '8mb' }));
   app.use(express.json({ limit: '1mb' }));
   app.use(cookieParser());
 

@@ -1,0 +1,20 @@
+Graapes HRMS - post-Enhanced update
+
+Changes made in this source package:
+- Added authenticated /api/dashboard/analytics endpoint with role-scoped data for Super Admin, HR Admin reporting tree, Manager team and Employee self scope.
+- Added live dashboard analytics panels: department headcount, attendance status, workforce growth, monthly attendance trends, approvals, upcoming holidays, recent audit activity and recent joiners.
+- Added HR leave type distribution, birthday/work-anniversary summaries and employee document count.
+- Added Employee personal attendance trend and personal work-at-a-glance content; removed the generic Workforce at a Glance panel from Employee dashboard.
+- Added /api/attendance/team-date endpoint. Super Admin gets organization-wide selected-date attendance; HR Admin gets direct reporting managers and their reports for the selected date.
+- Updated Attendance page so Super Admin sees the calendar with month navigation and date-specific Attendance Log/Correction Requests, without personal attendance summary or punch actions. HR keeps existing personal attendance and gets an additional My Team Attendance section.
+- Restricted reporting-manager options to HR/Manager roles and added server-side role validation for HR/Manager/Employee reporting lines.
+- Added responsive email wrapping and mobile attendance table overflow handling.
+- Sidebar already used a separate overflow-y scroll container with overscroll containment; route navigation already resets window and main scroll to top. Added extra scroll containment styling.
+
+Important verification note:
+- Backend JavaScript syntax checks passed for modified route files.
+- JSX parser syntax checks passed for modified React files.
+- Full npm install/build and live database integration tests could not be completed in this environment. Run `npm ci --include=dev`, `npx prisma generate`, `npm run build`, then test with each role before deploying.
+- Analytics are based on existing database records; months/statuses with no recorded rows naturally show zero. The document metric is total non-deleted documents, not a workflow status.
+- HR hierarchy is interpreted as HR -> direct Managers -> those Managers' direct reports.
+- For Add HR, Super Admin/Independent is represented by a null managerId because the Super Admin account may not have an Employee row.

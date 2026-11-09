@@ -151,6 +151,10 @@ body {
 ========================= */
 .desktop-sidebar {
   display: flex;
+  height: calc(100vh - 68px);
+  position: sticky;
+  top: 68px;
+  overflow: hidden;
   width: 68px;
   padding: 8px 7px 10px;
   gap: 0;
@@ -203,8 +207,14 @@ body {
 
 .sidebar-nav {
   min-height: 0;
-  overflow: hidden;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
 }
+.sidebar-nav::-webkit-scrollbar { display: none; }
+.desktop-sidebar > .sidebar-nav { min-height: 0; }
 
 .desktop-sidebar .sidebar-nav a {
   white-space: nowrap;
@@ -263,7 +273,7 @@ body {
   display: flex;
   width: min(320px, 82vw);
   flex-direction: column;
-  overflow-y: auto;
+  overflow: hidden;
   padding: 18px;
   background: var(--surface);
   border-right: 1px solid var(--border);
@@ -281,7 +291,10 @@ body {
 }
 
 .drawer-panel .sidebar-nav {
+  min-height: 0;
+  flex: 1 1 auto;
   overflow-y: auto;
+  overscroll-behavior: contain;
   scrollbar-width: none;
 }
 
@@ -372,4 +385,25 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+/* Mobile overflow safeguards for long account identifiers and action groups. */
+.profile-email { min-width: 0; max-width: 100%; overflow-wrap: anywhere; word-break: break-word; }
+.employee-directory-actions { display: flex; flex-wrap: wrap; gap: .75rem; min-width: 0; }
+.employee-directory-actions > button { max-width: 100%; white-space: normal; }
+@media (max-width: 640px) { .employee-directory-actions { width: 100%; } .employee-directory-actions > button { flex: 1 1 145px; justify-content: center; } }
+
+
+/* Responsive safety refinements: keep long account identifiers and action rows inside the viewport. */
+.profile-email { display:block; min-width:0; max-width:100%; overflow-wrap:anywhere; word-break:break-word; }
+.desktop-sidebar { overscroll-behavior: contain; }
+.sidebar-nav { overscroll-behavior: contain; touch-action: pan-y; }
+@media (max-width: 640px) {
+  .my-attendance, .my-attendance * { min-width: 0; }
+  .attendance-heading { align-items:flex-start; flex-wrap:wrap; gap:12px; }
+  .attendance-heading > div { max-width:100%; }
+  .attendance-table-wrap { max-width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .attendance-table { min-width:640px; }
+  .attendance-lower { grid-template-columns:minmax(0,1fr); }
+  .employee-directory, .employee-directory section { max-width:100%; }
+  .employee-directory button, .employee-directory a { max-width:100%; }
 }

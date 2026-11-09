@@ -87,6 +87,9 @@ export default function MyAttendance() {
   });
 
   const [records, setRecords] = useState([]);
+  const [selectedDate, setSelectedDate] = useState(() => formatDate(new Date()));
+  const [teamDateRecords, setTeamDateRecords] = useState([]);
+  const [teamDateLoading, setTeamDateLoading] = useState(false);
   const [todayRecord, setTodayRecord] = useState(null);
   const [corrections, setCorrections] = useState([]);
   const [holidays, setHolidays] = useState([]);
@@ -124,6 +127,10 @@ export default function MyAttendance() {
   });
 
   const isManagerOrAdmin = ['SUPER_ADMIN', 'HR_ADMIN', 'MANAGER'].includes(user?.role);
+  const isSuperAdmin = String(user?.role || '').toUpperCase() === 'SUPER_ADMIN';
+  const isHrAdmin = String(user?.role || '').toUpperCase() === 'HR_ADMIN';
+  // Super Admin and HR use this page as an organization overview, so personal leave colours are not shown there.
+  const showLeaveColours = !isSuperAdmin && !isHrAdmin;
 
   async function loadAttendance() {
     setLoading(true);
@@ -174,6 +181,31 @@ export default function MyAttendance() {
       setCorrections([]);
     }
   }
+
+  useEffect(() => {
+    if (!isSuperAdmin && !isHrAdmin) return undefined;
+
+    // Clear the previous date immediately so records from two dates never mix.
+    setTeamDateRecords([]);
+    setTeamDateLoading(true);
+    let cancelled = false;
+
+    api(`/attendance/team-date?date=${encodeURIComponent(selectedDate)}`)
+      .then((data) => {
+        if (cancelled) return;
+        // Keep only rows returned for the currently selected date.
+        const rows = Array.isArray(data.records) ? data.records : [];
+        setTeamDateRecords(rows.filter((record) => String(record.date || '').slice(0, 10) === selectedDate));
+      })
+      .catch(() => {
+        if (!cancelled) setTeamDateRecords([]);
+      })
+      .finally(() => {
+        if (!cancelled) setTeamDateLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [selectedDate, isSuperAdmin, isHrAdmin]);
 
   useEffect(() => {
     loadAttendance();
@@ -347,11 +379,11 @@ export default function MyAttendance() {
     <main className="my-attendance">
       <header className="attendance-heading">
         <div>
-          <h1><CalendarCheck size={25} /> My Attendance</h1>
-          <p>Track your attendance, check-in records and correction requests</p>
+          <h1><CalendarCheck size={25} /> {isSuperAdmin ? 'Organization Attendance' : 'My Attendance'}</h1>
+          <p>{isSuperAdmin ? 'Select a date to review organization-wide attendance' : 'Track your attendance, check-in records and correction requests'}</p>
         </div>
 
-        <div className="month-picker">
+        <div className={`month-picker ${isSuperAdmin ? 'hidden' : ''}`}>
           <CalendarDays size={18} />
           <span>{monthName}</span>
           <button aria-label="Previous month" onClick={() => moveMonth(-1)}>
@@ -385,7 +417,7 @@ export default function MyAttendance() {
         </div>
       )}
 
-      <section className="attendance-summary">
+      {!isSuperAdmin && <section className="attendance-summary">
         <article className="summary-card present">
           <span className="summary-icon"><CheckCircle2 /></span>
           <div>
@@ -421,9 +453,9 @@ export default function MyAttendance() {
             <small>From loaded records</small>
           </div>
         </article>
-      </section>
+      </section>}
 
-      <section className="today-attendance">
+      {!isSuperAdmin && <section className="today-attendance">
         <div className="today-title">
           <div>
             <span className={`live-dot ${checkedIn && !checkedOut ? 'active' : ''}`} />
@@ -464,36 +496,37 @@ export default function MyAttendance() {
         </div>
 
         <div className="attendance-actions">
-          <button
+          {String(user?.role || '').toUpperCase() !== 'SUPER_ADMIN' && <button
             className="punch-button check-in"
             disabled={!canCheckIn || actionLoading}
             onClick={() => punch('check-in')}
           >
             <LogIn size={17} />
             {actionLoading ? 'Please wait…' : 'Check In'}
-          </button>
+          </button>}
 
-          <button
+          {String(user?.role || '').toUpperCase() !== 'SUPER_ADMIN' && <button
             className="punch-button check-out"
             disabled={!canCheckOut || actionLoading}
             onClick={() => punch('check-out')}
           >
             <LogOut size={17} /> Check Out
-          </button>
+          </button>}
 
-          <button
+          {String(user?.role || '').toUpperCase() !== 'SUPER_ADMIN' && <button
             type="button"
             onClick={() => setShowCorrectionModal(true)}
             className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-semibold text-foreground transition hover:bg-surface-2"
           >
             <FileEdit size={14} /> Request Correction
-          </button>
+          </button>}
         </div>
-      </section>
+      </section>}
 
+      {(isSuperAdmin || isHrAdmin) && <p className="mb-2 text-xs text-muted">Selected date: <b>{selectedDate}</b> · {isSuperAdmin ? 'Organization-wide attendance' : 'Your reporting managers and employees'}</p>}
       <section className="attendance-lower">
         <div className="attendance-calendar panel">
-          <h2>{monthName}</h2>
+          <div className="mb-3 flex items-center justify-between gap-2"><h2>{monthName}</h2>{isSuperAdmin && <div className="flex gap-1"><button aria-label="Previous month" onClick={() => moveMonth(-1)}><ChevronLeft size={18}/></button><button aria-label="Next month" onClick={() => moveMonth(1)}><ChevronRight size={18}/></button></div>}</div>
 
           <div className="calendar-grid calendar-weekdays">
             {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
@@ -515,45 +548,43 @@ export default function MyAttendance() {
               const dayLeaves = leaveRequests.filter((item) => {
                 const start = String(item.startDate || '').slice(0, 10);
                 const end = String(item.endDate || item.startDate || '').slice(0, 10);
-                return dateKey >= start && dateKey <= end && ['APPROVED', 'PENDING'].includes(String(item.status || '').toUpperCase());
+                return dateKey >= start && dateKey <= end && String(item.status || '').toUpperCase() === 'APPROVED';
               });
-              const markerClasses = [];
-              if (['present', 'checked in', 'in progress'].includes(status)) markerClasses.push('dot-present');
-              else if (status === 'absent') markerClasses.push('dot-absent');
-              else if (status === 'late') markerClasses.push('dot-late');
-              if (dayHoliday.length) markerClasses.push('dot-holiday');
-              if (dayLeaves.some((leave) => String(leave.status).toUpperCase() === 'APPROVED')) markerClasses.push('dot-leave');
-              if (dayLeaves.some((leave) => String(leave.status).toUpperCase() === 'PENDING')) markerClasses.push('dot-pending-leave');
+              // Whole-box colour for the day: holiday > approved leave > attendance status > pending leave > today.
+              const hasApprovedLeave = dayLeaves.some((leave) => String(leave.status).toUpperCase() === 'APPROVED');
+              let fillClass = '';
+              if (dayHoliday.length) fillClass = 'fill-holiday';
+              else if (hasApprovedLeave && showLeaveColours) fillClass = 'fill-leave';
+              else if (['present', 'checked in', 'in progress'].includes(status)) fillClass = 'fill-present';
+              else if (status === 'late') fillClass = 'fill-late';
+              else if (status === 'absent') fillClass = 'fill-absent';
+              else if (isToday) fillClass = 'fill-today';
               const markerTitle = [
                 record ? statusLabel(record) : '',
                 ...dayHoliday.map((item) => `Holiday: ${item.name}`),
-                ...dayLeaves.map((item) => `Leave ${String(item.status).toLowerCase()}: ${item.leaveType || ''}`),
+                ...dayLeaves.map((item) => `On leave: ${item.leaveType || ''}`),
                 isToday ? 'Today' : '',
               ].filter(Boolean).join(' • ') || 'No attendance marker';
 
               return (
                 <div
-                  className={`calendar-day ${isToday ? 'is-today' : ''} ${markerClasses.length ? 'has-markers' : ''}`}
+                  className={`calendar-day ${fillClass ? `fill ${fillClass}` : ''} ${isToday ? 'is-today' : ''} ${selectedDate === dateKey && isSuperAdmin ? 'is-selected' : ''}`} onClick={() => { if (isSuperAdmin || isHrAdmin) setSelectedDate(dateKey); }} role={isSuperAdmin || isHrAdmin ? 'button' : undefined} tabIndex={isSuperAdmin || isHrAdmin ? 0 : undefined}
                   key={dateKey}
                   title={`${dateKey}: ${markerTitle}`}
                 >
                   <span>{day}</span>
-                  <div className="calendar-markers" aria-label={markerTitle}>
-                    {markerClasses.map((markerClass, markerIndex) => <i key={`${markerClass}-${markerIndex}`} className={markerClass} />)}
-                  </div>
                 </div>
               );
             })}
           </div>
 
           <div className="calendar-legend">
-            <span><i className="dot-present" /> Present</span>
-            <span><i className="dot-absent" /> Absent</span>
-            <span><i className="dot-late" /> Late</span>
-            <span><i className="dot-holiday" /> Holiday</span>
-            <span><i className="dot-leave" /> Approved Leave</span>
-            <span><i className="dot-pending-leave" /> Pending Leave</span>
-            <span><i className="dot-today" /> Today</span>
+            <span><i className="sq sq-present" /> Present</span>
+            <span><i className="sq sq-absent" /> Absent</span>
+            <span><i className="sq sq-late" /> Late</span>
+            <span><i className="sq sq-holiday" /> Holiday</span>
+            {showLeaveColours && <span><i className="sq sq-leave" /> On Leave</span>}
+            <span><i className="sq sq-today" /> Today</span>
           </div>
         </div>
 
@@ -597,13 +628,13 @@ export default function MyAttendance() {
                   ))}
                 </select>
               )}
-              <button
+              {!isSuperAdmin && <button
                 type="button"
                 onClick={() => setShowCorrectionModal(true)}
                 className="inline-flex items-center gap-1 rounded-md bg-accent px-2.5 py-1 text-xs font-semibold text-accent-contrast shadow-sm transition hover:opacity-90"
               >
                 <Plus size={13} /> Request
-              </button>
+              </button>}
             </div>
           </div>
 
@@ -612,6 +643,7 @@ export default function MyAttendance() {
               <table className="attendance-table">
                 <thead>
                   <tr>
+                    {(isSuperAdmin || isHrAdmin) && <><th>Employee</th><th>Department</th></>}
                     <th>Date</th>
                     <th>Check In</th>
                     <th>Check Out</th>
@@ -620,16 +652,17 @@ export default function MyAttendance() {
                   </tr>
                 </thead>
                 <tbody>
-                  {!loading && filteredRecords.length === 0 && (
+                  {!loading && (isSuperAdmin ? teamDateRecords.length === 0 : filteredRecords.length === 0) && (
                     <tr>
-                      <td colSpan="5" className="attendance-empty">
-                        No attendance records found for this month.
+                      <td colSpan={isSuperAdmin ? 7 : 5} className="attendance-empty">
+                        {isSuperAdmin ? `No attendance records found for ${selectedDate}.` : 'No attendance records found for this month.'}
                       </td>
                     </tr>
                   )}
 
-                  {filteredRecords.map((record) => (
+                  {(isSuperAdmin ? teamDateRecords : filteredRecords).map((record) => (
                     <tr key={record.id ?? record.date}>
+                      {(isSuperAdmin || isHrAdmin) && <><td>{record.employeeName || '—'}<small className="block text-muted">{record.employeeCode || ''}</small></td><td>{record.department || '—'}</td></>}
                       <td>{record.date || '—'}</td>
                       <td>{formatTime(record.checkIn)}</td>
                       <td>{formatTime(record.checkOut)}</td>
@@ -644,9 +677,9 @@ export default function MyAttendance() {
                     </tr>
                   ))}
 
-                  {loading && (
+                  {(isSuperAdmin ? teamDateLoading : loading) && (
                     <tr>
-                      <td colSpan="5" className="attendance-empty">Loading attendance…</td>
+                      <td colSpan={isSuperAdmin ? 7 : 5} className="attendance-empty">Loading attendance…</td>
                     </tr>
                   )}
                 </tbody>
@@ -744,6 +777,8 @@ export default function MyAttendance() {
       </section>
 
       {/* Request Correction Modal */}
+      {isHrAdmin && <section className="mt-5 rounded-2xl border border-border bg-surface p-5 shadow-card"><div className="mb-4 flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-bold">My Team Attendance</h2><p className="text-xs text-muted">All employees and managers · {selectedDate}</p></div><span className="rounded-lg bg-accent-soft px-3 py-1.5 text-xs font-semibold text-accent">{teamDateRecords.length} people</span></div><div className="attendance-table-wrap"><table className="attendance-table"><thead><tr><th>Employee</th><th>Role</th><th>Department</th><th>Check In</th><th>Check Out</th><th>Status</th></tr></thead><tbody>{teamDateRecords.map((r)=><tr key={r.employeeId}><td>{r.employeeName}<small className="block text-muted">{r.employeeCode}</small></td><td>{r.role.replaceAll('_',' ')}</td><td>{r.department}</td><td>{formatTime(r.checkIn)}</td><td>{formatTime(r.checkOut)}</td><td>{r.status.replaceAll('_',' ')}</td></tr>)}{!teamDateRecords.length&&<tr><td colSpan="6" className="attendance-empty">No reporting employees or managers found for this date.</td></tr>}</tbody></table></div></section>}
+
       {showCorrectionModal && (
         createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
